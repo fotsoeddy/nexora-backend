@@ -4,7 +4,7 @@ from django.contrib.auth import authenticate, get_user_model, password_validatio
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from .tokens import decode_uid, default_token_generator, email_verification_token_generator
+from ..tokens import decode_uid, default_token_generator, email_verification_token_generator
 
 User = get_user_model()
 

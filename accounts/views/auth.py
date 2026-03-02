@@ -11,8 +11,8 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from .emails import send_password_reset_email, send_verification_email
-from .serializers import (
+from ..emails import send_password_reset_email, send_verification_email
+from ..serializers import (
     ChangePasswordSerializer,
     EmailVerificationRequestSerializer,
     EmailVerificationSerializer,
