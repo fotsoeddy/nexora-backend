@@ -7,3 +7,12 @@ __pycache__/
 .coverage
 htmlcov/
 maquettes/
+
+# Frontend (React Native / Expo)
+node_modules/
+dist/
+.expo/
+web-build/
+*.tsbuildinfo
+expo-env.d.ts
+package-lock.json
