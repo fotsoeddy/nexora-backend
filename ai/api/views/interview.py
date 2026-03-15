@@ -2,8 +2,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
-from ai.models import InterviewSession, InterviewQuestion, InterviewFeedback, AIAssistant
+from ai.models import InterviewSession, InterviewQuestion, InterviewFeedback, AIAssistant, Job
 from ai.api.serializers import InterviewSessionSerializer, InterviewQuestionSerializer, InterviewFeedbackSerializer
+from ai.openai_utils import generate_interview_questions_openai, grade_interview_openai
 import json
 
 class InterviewSessionListView(APIView):
@@ -36,8 +37,6 @@ class VapiGenerateQuestionsView(APIView):
     Endpoint called by Vapi to generate questions.
     """
     def post(self, request):
-        # Vapi sends tool call payload
-        # Expected arguments: jobTitle, jobDescription, interviewType, questionCount, etc.
         data = request.data
         tool_call_list = data.get("message", {}).get("toolCallList", [])
         
@@ -46,29 +45,20 @@ class VapiGenerateQuestionsView(APIView):
             tool_id = tool_call.get("id")
             args = tool_call.get("function", {}).get("arguments", {})
             
-            # Here we would normally call an LLM (ChatGPT) to generate questions.
-            # For now, we'll return a structured mock response as per the requirement.
-            # In a real scenario, you'd use openai library here.
-            
-            mock_questions = [
-                {
-                    "id": "q1",
-                    "question": f"Based on your experience with {args.get('jobTitle', 'this role')}, how do you handle complex tasks?",
-                    "type": args.get("interviewType", "behavioral"),
-                    "rubric": "Look for structure and clarity."
-                },
-                {
-                    "id": "q2",
-                    "question": "Tell me about a time you faced a difficult challenge and how you overcame it.",
-                    "type": "behavioral",
-                    "rubric": "Check for problem-solving skills."
-                }
-            ]
+            # Use real OpenAI logic
+            questions = generate_interview_questions_openai(
+                job_title=args.get('jobTitle', 'Role'),
+                job_description=args.get('jobDescription', ''),
+                interview_type=args.get('interviewType', 'mixed'),
+                question_count=args.get('questionCount', 5),
+                seniority=args.get('seniority', 'mid'),
+                skills=args.get('skills', [])
+            )
             
             results.append({
                 "toolCallId": tool_id,
                 "result": {
-                    "questions": mock_questions
+                    "questions": questions
                 }
             })
             
@@ -87,20 +77,67 @@ class VapiGradeInterviewView(APIView):
             tool_id = tool_call.get("id")
             args = tool_call.get("function", {}).get("arguments", {})
             
-            # args will contain questions, answers, and job metadata
-            # Normally, you'd send this to ChatGPT for grading.
+            # args contain {questions: [], answers: [], job: {}}
+            # answers usually formatted as {questionId, answer, durationSeconds}
             
-            mock_grading = {
-                "overallScore": 8.5,
-                "hireReadiness": "ready",
-                "strengths": ["Clear communication", "Good technical depth"],
-                "improvements": ["Could provide more specific examples"],
-                "summaryToReadAloud": "You performed very well. Your answers were concise and showed deep understanding."
-            }
+            # Prepare data for grading
+            grading_result = grade_interview_openai(
+                job_metadata=args.get('job', {}),
+                questions_with_answers=args
+            )
             
             results.append({
                 "toolCallId": tool_id,
-                "result": mock_grading
+                "result": grading_result
             })
             
         return Response({"results": results})
+
+class JobInterviewGenerateView(APIView):
+    """
+    Generate questions for a specific job before the call starts.
+    """
+    def post(self, request):
+        job_id = request.data.get('job_id')
+        job = get_object_or_404(Job, pk=job_id)
+        
+        # Create an interview session
+        session = InterviewSession.objects.create(
+            user=request.user if request.user.is_authenticated else None,
+            job=job,
+            session_type="job_based",
+            interview_status="questions_generated",
+            interview_type=request.data.get('interview_type', 'mixed'),
+            question_count=request.data.get('question_count', 5)
+        )
+        
+        # Generate questions using OpenAI
+        questions_data = generate_interview_questions_openai(
+            job_title=job.title,
+            job_description=job.description,
+            interview_type=session.interview_type,
+            question_count=session.question_count
+        )
+        
+        # Save questions to the database
+        created_questions = []
+        for i, q in enumerate(questions_data):
+            question_obj = InterviewQuestion.objects.create(
+                session=session,
+                order=i + 1,
+                question_text=q.get('question'),
+                question_type=q.get('type', 'mixed'),
+                rubric=q.get('rubric', '')
+            )
+            created_questions.append({
+                "id": str(question_obj.id),
+                "question": question_obj.question_text,
+                "type": question_obj.question_type,
+                "rubric": question_obj.rubric
+            })
+            
+        return Response({
+            "session_id": str(session.id),
+            "job_title": job.title,
+            "questions": created_questions
+        }, status=status.HTTP_201_CREATED)
