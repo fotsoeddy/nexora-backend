@@ -1,0 +1,7 @@
+from rest_framework import serializers
+from ai.models import InterviewSession
+
+class InterviewSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InterviewSession
+        fields = '__all__'
