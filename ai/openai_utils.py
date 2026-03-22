@@ -2,12 +2,17 @@ import json
 from decouple import config
 from openai import OpenAI
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 openai_client = OpenAI(api_key=config('OPENAI_API_KEY'))
 
 def generate_interview_questions_openai(job_title, job_description, interview_type, question_count=5, seniority='mid', skills=None):
     """
     Generate interview questions using GPT-4.
     """
+    logger.info(f"Generating {question_count} questions for {job_title} ({seniority})")
     skills_str = ", ".join(skills) if skills else "relevant technical and soft skills"
     
     prompt = f"""
@@ -31,6 +36,8 @@ def generate_interview_questions_openai(job_title, job_description, interview_ty
         ],
         response_format={"type": "json_object"}
     )
+    
+    logger.debug(f"OpenAI response received for question generation")
 
     try:
         content = json.loads(response.choices[0].message.content)
@@ -42,7 +49,8 @@ def generate_interview_questions_openai(job_title, job_description, interview_ty
         else:
              questions = content
         return questions
-    except (json.JSONDecodeError, KeyError, IndexError):
+    except (json.JSONDecodeError, KeyError, IndexError) as e:
+        logger.error(f"Error parsing OpenAI question generation response: {e}")
         return []
 
 def grade_interview_openai(job_metadata, questions_with_answers):
@@ -50,6 +58,7 @@ def grade_interview_openai(job_metadata, questions_with_answers):
     Grades an interview based on questions and answers.
     questions_with_answers: list of dicts with {id, question, answer}
     """
+    logger.info(f"Grading interview for {job_metadata.get('jobTitle', 'unknown role')}")
     
     prompt = f"""
     Grade the following interview for a {job_metadata.get('jobTitle', 'this')} role.
@@ -73,10 +82,13 @@ def grade_interview_openai(job_metadata, questions_with_answers):
         ],
         response_format={"type": "json_object"}
     )
+    
+    logger.debug(f"OpenAI response received for interview grading")
 
     try:
         return json.loads(response.choices[0].message.content)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.error(f"Error parsing OpenAI grading response: {e}")
         return {
             "overallScore": 0,
             "hireReadiness": "not_ready",
