@@ -215,12 +215,24 @@ class VapiToolsView(APIView):
             logger.info(f"Processing tool call: {name} (id: {tool_call_id})")
 
             if name == "generate_interview_questions":
-                question_count = args.get("numQuestions") or args.get("questionCount", 5)
+                job_id = args.get("jobId")
+                interview_type = args.get("interviewType", "mixed")
+                num_questions = args.get("numQuestions") or args.get("questionCount", 5)
+
+                if job_id:
+                    logger.info(f"Fetching job details for jobId: {job_id}")
+                    job = get_object_or_404(Job, pk=job_id)
+                    job_title = job.title
+                    job_description = (job.description or "") + "\n\nRequirements:\n" + (job.requirements or "")
+                else:
+                    job_title = args.get("jobTitle", "Role")
+                    job_description = args.get("jobDescription", "")
+
                 questions_raw = generate_interview_questions_openai(
-                    job_title=args.get("jobTitle", "Role"),
-                    job_description=args.get("jobDescription", ""),
-                    interview_type=args.get("interviewType", "mixed"),
-                    question_count=question_count,
+                    job_title=job_title,
+                    job_description=job_description,
+                    interview_type=interview_type,
+                    question_count=num_questions,
                     seniority=args.get("seniority", "mid"),
                     skills=args.get("skills", []),
                 )
@@ -229,12 +241,31 @@ class VapiToolsView(APIView):
                         "id": q.get("id", f"q{i+1}"),
                         "order": i + 1,
                         "question": q.get("question", ""),
-                        "type": q.get("type", "mixed"),
+                        "type": q.get("type", interview_type),
                         "rubric": q.get("rubric", ""),
                     }
                     for i, q in enumerate(questions_raw)
                 ]
                 result = {"questions": questions}
+
+            elif name == "create_interview_session":
+                job_id = args.get("jobId")
+                logger.info(f"Creating voice-first session for jobId: {job_id}")
+                job = get_object_or_404(Job, pk=job_id)
+
+                session = InterviewSession.objects.create(
+                    user=None,
+                    job=job,
+                    session_type="voice_first",
+                    interview_status="created",
+                    interview_type=args.get("interviewType", "mixed"),
+                    question_count=args.get("numQuestions") or args.get("questionCount", 5),
+                )
+
+                result = {
+                    "sessionId": str(session.id),
+                    "jobTitle": job.title
+                }
 
             elif name == "save_interview_answer":
                 # Persistence logic could go here

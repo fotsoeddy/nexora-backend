@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Nexora Voice Test</title>
+    <style>
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: Arial, sans-serif;
+        background: #f3f4f6;
+        color: #111827;
+        padding: 20px;
+      }
+
+      .card {
+        width: 100%;
+        max-width: 420px;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 20px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+      }
+
+      h1 {
+        margin: 0 0 8px;
+        font-size: 22px;
+        text-align: center;
+      }
+
+      p {
+        margin: 0 0 16px;
+        text-align: center;
+        color: #6b7280;
+        font-size: 14px;
+      }
+
+      .status {
+        text-align: center;
+        font-weight: bold;
+        margin-bottom: 16px;
+      }
+
+      .ok { color: #059669; }
+      .error { color: #dc2626; }
+
+      .row {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-bottom: 16px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+
+      #start {
+        background: #2563eb;
+        color: white;
+      }
+
+      #stop {
+        background: #e5e7eb;
+        color: #111827;
+      }
+
+      #stop:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .box {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 12px;
+        background: #f9fafb;
+        min-height: 90px;
+        font-size: 14px;
+        white-space: pre-wrap;
+      }
+
+      .label {
+        font-size: 13px;
+        font-weight: bold;
+        margin-bottom: 8px;
+      }
+
+      .small {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #6b7280;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Nexora Voice Test</h1>
+      <p>Simple voice test with transcript</p>
+
+      <div id="status" class="status">Status: loading...</div>
+
+      <div class="row">
+        <button id="start">Start</button>
+        <button id="stop" disabled>Stop</button>
+      </div>
+
+      <div class="label">What Vapi heard:</div>
+      <div id="transcript" class="box">No transcript yet.</div>
+
+      <div class="small">
+        Open browser console too. If transcript is wrong here, the issue is speech recognition.
+      </div>
+    </div>
+
+    <script>
+      const API_KEY = "566f25e7-5fba-481e-9742-d34a961c61c8";
+      const ASSISTANT_ID = "d793cfcc-8165-4ef2-8937-16772c001e96";
+
+      let vapi = null;
+
+      const statusEl = document.getElementById("status");
+      const transcriptEl = document.getElementById("transcript");
+      const startBtn = document.getElementById("start");
+      const stopBtn = document.getElementById("stop");
+
+      function setStatus(text, type = "") {
+        statusEl.textContent = text;
+        statusEl.className = "status";
+        if (type) statusEl.classList.add(type);
+      }
+
+      async function loadSdk() {
+        return new Promise((resolve, reject) => {
+          if (window.vapiSDK) return resolve();
+
+          const script = document.createElement("script");
+          script.src = "https://cdn.jsdelivr.net/gh/VapiAI/html-script-tag@latest/dist/assets/index.js";
+          script.async = true;
+          script.onload = () => resolve();
+          script.onerror = () => reject(new Error("Could not load Vapi widget"));
+          document.head.appendChild(script);
+        });
+      }
+
+      async function init() {
+        try {
+          await loadSdk();
+
+          vapi = window.vapiSDK.run({
+            apiKey: API_KEY,
+            assistant: ASSISTANT_ID,
+            config: {
+              theme: "light",
+              buttonText: "Talk",
+              buttonPosition: "bottom-right"
+            }
+          });
+
+          setStatus("Status: ready");
+
+          if (typeof vapi.on === "function") {
+            vapi.on("call-start", () => {
+              setStatus("Status: call started", "ok");
+              stopBtn.disabled = false;
+              transcriptEl.textContent = "Listening...";
+            });
+
+            vapi.on("call-end", () => {
+              setStatus("Status: call ended");
+              stopBtn.disabled = true;
+            });
+
+            vapi.on("message", (message) => {
+              console.log("Vapi message:", message);
+
+              if (message?.type === "transcript") {
+                const role = message.role || "unknown";
+                const text = message.transcript || "";
+
+                transcriptEl.textContent = `[${role}] ${text}`;
+              }
+            });
+
+            vapi.on("error", (e) => {
+              console.error("Vapi error", e);
+              const msg = e?.errorMsg || e?.message || "Unknown error";
+              setStatus("Status: " + msg, "error");
+            });
+          }
+        } catch (err) {
+          console.error(err);
+          setStatus("Status: " + err.message, "error");
+        }
+      }
+
+      startBtn.addEventListener("click", () => {
+        setStatus("Status: click the floating Talk button");
+      });
+
+      stopBtn.addEventListener("click", () => {
+        if (vapi && typeof vapi.stop === "function") {
+          vapi.stop();
+        }
+      });
+
+      init();
+    </script>
+  </body>
+</html>
