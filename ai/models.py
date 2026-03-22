@@ -2,6 +2,10 @@ import uuid
 from django.db import models
 from django.conf import settings
 from django_extensions.db.models import TimeStampedModel, ActivatorModel
+from global_data.enum import (
+    EmploymentType, AssistantType, SessionType, 
+    InterviewType, InterviewStatus, QuestionType, HireReadiness
+)
 
 class BaseModel(TimeStampedModel, ActivatorModel):
     """
@@ -17,18 +21,11 @@ class BaseModel(TimeStampedModel, ActivatorModel):
 
 
 class Job(BaseModel):
-    EMPLOYMENT_TYPES = [
-        ("full_time", "Full Time"),
-        ("part_time", "Part Time"),
-        ("contract", "Contract"),
-        ("internship", "Internship"),
-    ]
-
     title = models.CharField(max_length=255)
     company_name = models.CharField(max_length=255, blank=True, null=True)
     description = models.TextField()
     requirements = models.TextField(blank=True, null=True)
-    employment_type = models.CharField(max_length=20, choices=EMPLOYMENT_TYPES, blank=True, null=True)
+    employment_type = models.CharField(max_length=20, choices=EmploymentType.choices, blank=True, null=True)
     location = models.CharField(max_length=255, blank=True, null=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -43,13 +40,8 @@ class Job(BaseModel):
 
 
 class AIAssistant(BaseModel):
-    ASSISTANT_TYPES = [
-        ("job_interviewer", "Job Interviewer"),
-        ("setup_interviewer", "Setup Interviewer"),
-    ]
-
     name = models.CharField(max_length=100)
-    assistant_type = models.CharField(max_length=30, choices=ASSISTANT_TYPES)
+    assistant_type = models.CharField(max_length=30, choices=AssistantType.choices)
     vapi_assistant_id = models.CharField(max_length=255, unique=True)
     # is_active field removed because ActivatorModel handles activation state
     # via the `status` field (e.g., Active / Inactive)
@@ -59,27 +51,6 @@ class AIAssistant(BaseModel):
 
 
 class InterviewSession(BaseModel):
-    SESSION_TYPES = [
-        ("job_based", "Job Based"),
-        ("general_setup", "General Setup"),
-    ]
-
-    INTERVIEW_TYPES = [
-        ("technical", "Technical"),
-        ("behavioral", "Behavioral"),
-        ("mixed", "Mixed"),
-    ]
-
-    SESSION_STATUS_CHOICES = [
-        ("pending", "Pending"),
-        ("collecting_preferences", "Collecting Preferences"),
-        ("questions_generated", "Questions Generated"),
-        ("in_progress", "In Progress"),
-        ("completed", "Completed"),
-        ("graded", "Graded"),
-        ("failed", "Failed"),
-    ]
-
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -100,11 +71,11 @@ class InterviewSession(BaseModel):
         related_name="interview_sessions"
     )
 
-    session_type = models.CharField(max_length=20, choices=SESSION_TYPES)
-    interview_type = models.CharField(max_length=20, choices=INTERVIEW_TYPES, blank=True, null=True)
+    session_type = models.CharField(max_length=20, choices=SessionType.choices)
+    interview_type = models.CharField(max_length=20, choices=InterviewType.choices, blank=True, null=True)
     
     # Renamed from 'status' to 'interview_status' to avoid clashing with ActivatorModel's 'status'
-    interview_status = models.CharField(max_length=30, choices=SESSION_STATUS_CHOICES, default="pending")
+    interview_status = models.CharField(max_length=30, choices=InterviewStatus.choices, default=InterviewStatus.PENDING)
 
     # for general flow if no job selected first
     target_job_title = models.CharField(max_length=255, blank=True, null=True)
@@ -125,13 +96,6 @@ class InterviewSession(BaseModel):
 
 
 class InterviewQuestion(BaseModel):
-    QUESTION_TYPES = [
-        ("technical", "Technical"),
-        ("behavioral", "Behavioral"),
-        ("situational", "Situational"),
-        ("mixed", "Mixed"),
-    ]
-
     session = models.ForeignKey(
         InterviewSession,
         on_delete=models.CASCADE,
@@ -139,7 +103,7 @@ class InterviewQuestion(BaseModel):
     )
     order = models.PositiveIntegerField()
     question_text = models.TextField()
-    question_type = models.CharField(max_length=20, choices=QUESTION_TYPES, default="mixed")
+    question_type = models.CharField(max_length=20, choices=QuestionType.choices, default=QuestionType.MIXED)
     difficulty = models.CharField(max_length=50, blank=True, null=True)
     rubric = models.TextField(blank=True, null=True)
     source = models.CharField(max_length=50, default="ai_generated")
@@ -177,20 +141,13 @@ class InterviewAnswer(BaseModel):
 
 
 class InterviewFeedback(BaseModel):
-    HIRE_READINESS = [
-        ("not_ready", "Not Ready"),
-        ("needs_practice", "Needs Practice"),
-        ("ready", "Ready"),
-        ("strong_ready", "Strong Ready"),
-    ]
-
     session = models.OneToOneField(
         InterviewSession,
         on_delete=models.CASCADE,
         related_name="feedback"
     )
     overall_score = models.DecimalField(max_digits=4, decimal_places=2, blank=True, null=True)
-    hire_readiness = models.CharField(max_length=30, choices=HIRE_READINESS, blank=True, null=True)
+    hire_readiness = models.CharField(max_length=30, choices=HireReadiness.choices, blank=True, null=True)
     strengths = models.JSONField(default=list, blank=True)
     improvements = models.JSONField(default=list, blank=True)
     summary_to_read_aloud = models.TextField(blank=True, null=True)

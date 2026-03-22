@@ -1,0 +1,183 @@
+openapi: 3.0.3
+info:
+  title: Nexora API
+  version: 1.0.0
+  description: API documentation for Nexora backend services including AI and Interview
+    modules.
+paths:
+  /ai/api/interviews/sessions/:
+    get:
+      operationId: ai_api_interviews_sessions_retrieve
+      description: List user sessions or start a new session.
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: ai_api_interviews_sessions_create
+      description: List user sessions or start a new session.
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /ai/api/interviews/sessions/{id}/:
+    get:
+      operationId: ai_api_interviews_sessions_retrieve_2
+      description: Retrieve interview session details.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /ai/api/interviews/sessions/generate/:
+    post:
+      operationId: ai_api_interviews_sessions_generate_create
+      description: Generate questions for a specific job before the call starts.
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /ai/api/jobs/:
+    get:
+      operationId: ai_api_jobs_retrieve
+      description: List all jobs or create a new job.
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: ai_api_jobs_create
+      description: List all jobs or create a new job.
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /ai/api/jobs/{id}/:
+    get:
+      operationId: ai_api_jobs_retrieve_2
+      description: Retrieve, update or delete a job instance.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+    put:
+      operationId: ai_api_jobs_update
+      description: Retrieve, update or delete a job instance.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+    delete:
+      operationId: ai_api_jobs_destroy
+      description: Retrieve, update or delete a job instance.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '204':
+          description: No response body
+  /ai/api/vapi/generate-questions/:
+    post:
+      operationId: ai_api_vapi_generate_questions_create
+      description: Endpoint called by Vapi to generate questions.
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /ai/api/vapi/grade-interview/:
+    post:
+      operationId: ai_api_vapi_grade_interview_create
+      description: Endpoint called by Vapi to grade the interview.
+      tags:
+      - ai
+      security:
+      - cookieAuth: []
+      - basicAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
