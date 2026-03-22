@@ -9,3 +9,4 @@ drf-spectacular
 psycopg2-binary
 whitenoise
 gunicorn
+djangorestframework-simplejwt
