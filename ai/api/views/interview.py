@@ -186,6 +186,78 @@ class VapiSaveAnswerView(APIView):
         logger.info(f"VapiSaveAnswerView returning {len(results)} results")
         return Response({"results": results})
 
+class VapiToolsView(APIView):
+    """
+    Central dispatcher for all Vapi tool calls.
+    """
+    permission_classes = [IsVapiWebhook]
+
+    def post(self, request):
+        logger.info(f"VapiToolsView.post called with data: {request.data}")
+        data = request.data
+        tool_calls = data.get("message", {}).get("toolCallList", [])
+        results = []
+
+        for tc in tool_calls:
+            tool_call_id = tc.get("toolCallId") or tc.get("id")
+            fn = tc.get("function", {}) or {}
+            name = fn.get("name")
+
+            raw_args = fn.get("arguments", {})
+            if isinstance(raw_args, str):
+                try:
+                    args = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    args = {}
+            else:
+                args = raw_args
+
+            logger.info(f"Processing tool call: {name} (id: {tool_call_id})")
+
+            if name == "generate_interview_questions":
+                question_count = args.get("numQuestions") or args.get("questionCount", 5)
+                questions_raw = generate_interview_questions_openai(
+                    job_title=args.get("jobTitle", "Role"),
+                    job_description=args.get("jobDescription", ""),
+                    interview_type=args.get("interviewType", "mixed"),
+                    question_count=question_count,
+                    seniority=args.get("seniority", "mid"),
+                    skills=args.get("skills", []),
+                )
+                questions = [
+                    {
+                        "id": q.get("id", f"q{i+1}"),
+                        "order": i + 1,
+                        "question": q.get("question", ""),
+                        "type": q.get("type", "mixed"),
+                        "rubric": q.get("rubric", ""),
+                    }
+                    for i, q in enumerate(questions_raw)
+                ]
+                result = {"questions": questions}
+
+            elif name == "save_interview_answer":
+                # Persistence logic could go here
+                # sessionId = args.get("sessionId")
+                # questionId = args.get("questionId")
+                # answer = args.get("answer")
+                result = {"ok": True}
+
+            elif name == "grade_interview":
+                result = grade_interview_openai(
+                    job_metadata=args.get("job", {}),
+                    questions_with_answers=args,
+                )
+
+            else:
+                logger.warning(f"Unknown tool called: {name}")
+                result = {"error": f"Unknown tool: {name}"}
+
+            results.append({"toolCallId": tool_call_id, "result": result})
+
+        logger.info(f"VapiToolsView returning {len(results)} results")
+        return Response({"results": results})
+
 class JobInterviewGenerateView(APIView):
     """
     Generate questions for a specific job before the call starts.
