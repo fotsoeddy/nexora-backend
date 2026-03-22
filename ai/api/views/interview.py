@@ -42,21 +42,45 @@ class VapiGenerateQuestionsView(APIView):
         
         results = []
         for tool_call in tool_call_list:
-            tool_id = tool_call.get("id")
-            args = tool_call.get("function", {}).get("arguments", {})
+            # Fix 1: use toolCallId with id as fallback
+            tool_call_id = tool_call.get("toolCallId") or tool_call.get("id")
+
+            # Fix 2: arguments may arrive as a JSON string
+            raw_args = tool_call.get("function", {}).get("arguments", {})
+            if isinstance(raw_args, str):
+                try:
+                    args = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    args = {}
+            else:
+                args = raw_args
             
-            # Use real OpenAI logic
-            questions = generate_interview_questions_openai(
+            # Fix 3: use numQuestions (with questionCount fallback for compatibility)
+            question_count = args.get('numQuestions') or args.get('questionCount', 5)
+
+            questions_raw = generate_interview_questions_openai(
                 job_title=args.get('jobTitle', 'Role'),
                 job_description=args.get('jobDescription', ''),
                 interview_type=args.get('interviewType', 'mixed'),
-                question_count=args.get('questionCount', 5),
+                question_count=question_count,
                 seniority=args.get('seniority', 'mid'),
                 skills=args.get('skills', [])
             )
+
+            # Fix 4: normalize to a predictable question schema
+            questions = [
+                {
+                    "id": q.get("id", f"q{i + 1}"),
+                    "order": i + 1,
+                    "question": q.get("question", ""),
+                    "type": q.get("type", "mixed"),
+                    "rubric": q.get("rubric", ""),
+                }
+                for i, q in enumerate(questions_raw)
+            ]
             
             results.append({
-                "toolCallId": tool_id,
+                "toolCallId": tool_call_id,
                 "result": {
                     "questions": questions
                 }
@@ -74,20 +98,26 @@ class VapiGradeInterviewView(APIView):
         
         results = []
         for tool_call in tool_call_list:
-            tool_id = tool_call.get("id")
-            args = tool_call.get("function", {}).get("arguments", {})
+            # Fix 1: use toolCallId with id as fallback
+            tool_call_id = tool_call.get("toolCallId") or tool_call.get("id")
+
+            # Fix 2: arguments may arrive as a JSON string
+            raw_args = tool_call.get("function", {}).get("arguments", {})
+            if isinstance(raw_args, str):
+                try:
+                    args = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    args = {}
+            else:
+                args = raw_args
             
-            # args contain {questions: [], answers: [], job: {}}
-            # answers usually formatted as {questionId, answer, durationSeconds}
-            
-            # Prepare data for grading
             grading_result = grade_interview_openai(
                 job_metadata=args.get('job', {}),
                 questions_with_answers=args
             )
             
             results.append({
-                "toolCallId": tool_id,
+                "toolCallId": tool_call_id,
                 "result": grading_result
             })
             
