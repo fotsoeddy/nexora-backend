@@ -137,5 +137,7 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API documentation for Nexora backend services including AI and Interview modules.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
-    # OTHER SETTINGS
 }
+
+# Vapi webhook auth token
+VAPI_WEBHOOK_TOKEN = config('VAPI_WEBHOOK_TOKEN')

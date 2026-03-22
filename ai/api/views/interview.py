@@ -1,11 +1,22 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import BasePermission
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from ai.models import InterviewSession, InterviewQuestion, InterviewFeedback, AIAssistant, Job
 from ai.api.serializers import InterviewSessionSerializer, InterviewQuestionSerializer, InterviewFeedbackSerializer
 from ai.openai_utils import generate_interview_questions_openai, grade_interview_openai
 import json
+
+
+class IsVapiWebhook(BasePermission):
+    """
+    Allows access only to requests carrying the correct Vapi webhook Bearer token.
+    """
+    def has_permission(self, request, view):
+        auth = request.headers.get("Authorization", "")
+        return auth == f"Bearer {settings.VAPI_WEBHOOK_TOKEN}"
 
 class InterviewSessionListView(APIView):
     """
@@ -36,6 +47,7 @@ class VapiGenerateQuestionsView(APIView):
     """
     Endpoint called by Vapi to generate questions.
     """
+    permission_classes = [IsVapiWebhook]
     def post(self, request):
         data = request.data
         tool_call_list = data.get("message", {}).get("toolCallList", [])
@@ -92,6 +104,7 @@ class VapiGradeInterviewView(APIView):
     """
     Endpoint called by Vapi to grade the interview.
     """
+    permission_classes = [IsVapiWebhook]
     def post(self, request):
         data = request.data
         tool_call_list = data.get("message", {}).get("toolCallList", [])
