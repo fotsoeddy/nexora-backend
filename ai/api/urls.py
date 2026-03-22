@@ -5,6 +5,7 @@ from ai.api.views.interview import (
     InterviewSessionDetailView, 
     VapiGenerateQuestionsView, 
     VapiGradeInterviewView,
+    VapiSaveAnswerView,
     JobInterviewGenerateView
 )
 
@@ -21,4 +22,5 @@ urlpatterns = [
     # Vapi tool endpoints
     path('vapi/generate-questions/', VapiGenerateQuestionsView.as_view(), name='vapi-generate-questions'),
     path('vapi/grade-interview/', VapiGradeInterviewView.as_view(), name='vapi-grade-interview'),
+    path('vapi/save-answer/', VapiSaveAnswerView.as_view(), name='vapi-save-answer'),
 ]

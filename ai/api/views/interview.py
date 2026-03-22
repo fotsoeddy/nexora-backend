@@ -8,6 +8,9 @@ from ai.models import InterviewSession, InterviewQuestion, InterviewFeedback, AI
 from ai.api.serializers import InterviewSessionSerializer, InterviewQuestionSerializer, InterviewFeedbackSerializer
 from ai.openai_utils import generate_interview_questions_openai, grade_interview_openai
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class IsVapiWebhook(BasePermission):
@@ -23,15 +26,19 @@ class InterviewSessionListView(APIView):
     List user sessions or start a new session.
     """
     def get(self, request):
+        logger.info(f"InterviewSessionListView.get called by user: {request.user}")
         sessions = InterviewSession.objects.filter(user=request.user) if request.user.is_authenticated else InterviewSession.objects.all()
         serializer = InterviewSessionSerializer(sessions, many=True)
         return Response(serializer.data)
 
     def post(self, request):
+        logger.info(f"InterviewSessionListView.post called with data: {request.data}")
         serializer = InterviewSessionSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(user=request.user if request.user.is_authenticated else None)
+            logger.info("InterviewSession created successfully")
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+        logger.warning(f"InterviewSession creation failed: {serializer.errors}")
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class InterviewSessionDetailView(APIView):
@@ -39,6 +46,7 @@ class InterviewSessionDetailView(APIView):
     Retrieve interview session details.
     """
     def get(self, request, pk):
+        logger.info(f"InterviewSessionDetailView.get called for pk: {pk}")
         session = get_object_or_404(InterviewSession, pk=pk)
         serializer = InterviewSessionSerializer(session)
         return Response(serializer.data)
@@ -49,6 +57,7 @@ class VapiGenerateQuestionsView(APIView):
     """
     permission_classes = [IsVapiWebhook]
     def post(self, request):
+        logger.info(f"VapiGenerateQuestionsView.post called with data: {request.data}")
         data = request.data
         tool_call_list = data.get("message", {}).get("toolCallList", [])
         
@@ -98,6 +107,7 @@ class VapiGenerateQuestionsView(APIView):
                 }
             })
             
+        logger.info(f"VapiGenerateQuestionsView returning {len(results)} results")
         return Response({"results": results})
 
 class VapiGradeInterviewView(APIView):
@@ -106,6 +116,7 @@ class VapiGradeInterviewView(APIView):
     """
     permission_classes = [IsVapiWebhook]
     def post(self, request):
+        logger.info(f"VapiGradeInterviewView.post called with data: {request.data}")
         data = request.data
         tool_call_list = data.get("message", {}).get("toolCallList", [])
         
@@ -134,6 +145,45 @@ class VapiGradeInterviewView(APIView):
                 "result": grading_result
             })
             
+        logger.info(f"VapiGradeInterviewView returning {len(results)} results")
+        return Response({"results": results})
+
+
+class VapiSaveAnswerView(APIView):
+    """
+    Endpoint called by Vapi after each question to save the candidate answer.
+    """
+    permission_classes = [IsVapiWebhook]
+    
+    def post(self, request):
+        logger.info(f"VapiSaveAnswerView.post called with data: {request.data}")
+        data = request.data
+        tool_call_list = data.get("message", {}).get("toolCallList", [])
+        results = []
+
+        for tool_call in tool_call_list:
+            tool_call_id = tool_call.get("toolCallId") or tool_call.get("id")
+
+            raw_args = tool_call.get("function", {}).get("arguments", {})
+            if isinstance(raw_args, str):
+                try:
+                    args = json.loads(raw_args)
+                except json.JSONDecodeError:
+                    args = {}
+            else:
+                args = raw_args
+
+            # Logic to persist the answer could go here
+            # e.g., session_id = args.get("sessionId")
+            # question_id = args.get("questionId")
+            # answer = args.get("answer")
+
+            results.append({
+                "toolCallId": tool_call_id,
+                "result": {"ok": True}
+            })
+
+        logger.info(f"VapiSaveAnswerView returning {len(results)} results")
         return Response({"results": results})
 
 class JobInterviewGenerateView(APIView):
@@ -141,6 +191,7 @@ class JobInterviewGenerateView(APIView):
     Generate questions for a specific job before the call starts.
     """
     def post(self, request):
+        logger.info(f"JobInterviewGenerateView.post called with data: {request.data}")
         job_id = request.data.get('job_id')
         job = get_object_or_404(Job, pk=job_id)
         
