@@ -22,6 +22,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('ai/', include('ai.urls')),
     path('api/', include('ai.api.user_urls')),
+    path('api/admin/', include('core.api.urls')),
     path('', include('user.urls')),
     
     # API Documentation
