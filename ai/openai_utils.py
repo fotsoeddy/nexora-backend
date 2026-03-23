@@ -67,6 +67,102 @@ def _local_answer_evaluation(answer_text):
         feedback = "Strong baseline answer. The quantified detail improves credibility."
     return {"score": round(score, 2), "feedback": feedback}
 
+
+def _local_chat_response(message, context_type="career_advice"):
+    normalized = message.lower()
+    if "salary" in normalized or "compensation" in normalized:
+        return {
+            "content": "For salary discussions, anchor your expectation on scope, impact, and local market demand. I can help you frame a negotiation message next.",
+            "suggestions": [
+                "Estimate my salary range",
+                "How do I negotiate confidently?",
+            ],
+        }
+    if "cv" in normalized or "resume" in normalized:
+        return {
+            "content": "Focus your CV on measurable impact, core skills, and the role you are targeting. Stronger bullets usually start with action, then outcome, then evidence.",
+            "suggestions": [
+                "How do I improve my CV summary?",
+                "Write stronger achievement bullets",
+            ],
+        }
+    if "interview" in normalized:
+        return {
+            "content": "Prepare concise answers built around context, action, and result. The clearest answers usually quantify impact and explain your decision-making.",
+            "suggestions": [
+                "Give me a mock interview question",
+                "How should I answer behavioral questions?",
+            ],
+        }
+    return {
+        "content": (
+            "I can help you structure applications, improve interview readiness, and make your profile more compelling. "
+            f"Tell me what you need most for your {context_type.replace('_', ' ')} workflow."
+        ),
+        "suggestions": [
+            "Help me tailor my application",
+            "How do I stand out for this role?",
+        ],
+    }
+
+
+def _local_cover_letter(job_title, company_name, tone="professional"):
+    greeting = "Dear Hiring Team,"
+    if tone == "confident":
+        opening = f"I am excited to bring proven delivery discipline to the {job_title} opportunity at {company_name}."
+    elif tone == "creative":
+        opening = f"{company_name} is building the kind of work that makes the {job_title} role genuinely compelling to me."
+    elif tone == "formal":
+        opening = f"I am writing to express my interest in the {job_title} position at {company_name}."
+    else:
+        opening = f"I am applying for the {job_title} role at {company_name} with strong interest in contributing quickly and effectively."
+
+    return (
+        f"{greeting}\n\n"
+        f"{opening} My background combines structured execution, collaborative delivery, and a strong focus on measurable impact. "
+        "I am comfortable translating business goals into clear priorities, maintaining quality under pressure, and communicating effectively with cross-functional teams.\n\n"
+        f"What attracts me most to {company_name} is the opportunity to contribute in a role where ownership, adaptability, and continuous improvement matter. "
+        "I would welcome the opportunity to discuss how I can add value from the first weeks of collaboration.\n\n"
+        "Sincerely,\n"
+        "Nexora Candidate"
+    )
+
+
+def _local_salary_estimate(job_title, city, experience_level):
+    experience_multiplier = {
+        "0-2": 1.0,
+        "3-5": 1.25,
+        "5-8": 1.55,
+        "8+": 1.85,
+    }.get(experience_level, 1.2)
+    base = 350000
+    if "architect" in job_title.lower():
+        base = 850000
+    elif "engineer" in job_title.lower():
+        base = 650000
+    elif "designer" in job_title.lower():
+        base = 450000
+    elif "manager" in job_title.lower():
+        base = 700000
+
+    estimated_median = int(base * experience_multiplier)
+    estimated_min = int(estimated_median * 0.82)
+    estimated_max = int(estimated_median * 1.22)
+    return {
+        "job_title": job_title,
+        "city": city,
+        "experience_level": experience_level,
+        "estimated_min": estimated_min,
+        "estimated_median": estimated_median,
+        "estimated_max": estimated_max,
+        "confidence_level": 0.72,
+        "data_points_used": 24,
+        "explanation": (
+            "This estimate is based on role seniority, demand intensity, and the market proxy available in the current environment. "
+            "Use it as a negotiation anchor, not as a guaranteed offer."
+        ),
+    }
+
 def generate_interview_questions_openai(job_title, job_description, interview_type, question_count=5, seniority='mid', skills=None):
     """
     Generate interview questions using GPT-4.
@@ -197,3 +293,102 @@ def evaluate_interview_answer(job_title, question_text, answer_text, seniority='
     except (json.JSONDecodeError, ValueError, TypeError) as e:
         logger.error(f"Error parsing OpenAI answer evaluation response: {e}")
         return _local_answer_evaluation(answer_text)
+
+
+def generate_chat_response(message, context_type="career_advice", conversation=None):
+    prompt = f"""
+    You are Nexora's AI career assistant.
+    Context type: {context_type}
+    Conversation so far: {json.dumps(conversation or [], ensure_ascii=False)}
+    Candidate message: {message}
+
+    Return valid JSON with:
+    - content: assistant reply
+    - suggestions: array of 2 short follow-up suggestions
+    """
+
+    if not openai_client:
+        logger.warning("OPENAI_API_KEY is missing, using local chat fallback")
+        return _local_chat_response(message, context_type)
+
+    response = openai_client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a concise, practical career assistant. Output strictly valid JSON."},
+            {"role": "user", "content": prompt},
+        ],
+        response_format={"type": "json_object"},
+    )
+
+    try:
+        data = json.loads(response.choices[0].message.content)
+        return {
+            "content": str(data.get("content", "")).strip(),
+            "suggestions": data.get("suggestions", [])[:3],
+        }
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        logger.error(f"Error parsing chat response: {e}")
+        return _local_chat_response(message, context_type)
+
+
+def generate_cover_letter_text(job_title, company_name, tone="professional"):
+    prompt = f"""
+    Write a concise cover letter for the role "{job_title}" at "{company_name}".
+    Tone: {tone}
+    Keep it professional, concrete, and easy to personalize.
+    """
+
+    if not openai_client:
+        logger.warning("OPENAI_API_KEY is missing, using local cover letter fallback")
+        return _local_cover_letter(job_title, company_name, tone)
+
+    response = openai_client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": "You write concise, credible cover letters."},
+            {"role": "user", "content": prompt},
+        ],
+    )
+    return response.choices[0].message.content.strip()
+
+
+def estimate_salary_range(job_title, city, experience_level):
+    prompt = f"""
+    Estimate a salary range for the role "{job_title}" in "{city}" for experience level "{experience_level}".
+    Return valid JSON with:
+    - estimated_min
+    - estimated_median
+    - estimated_max
+    - confidence_level
+    - data_points_used
+    - explanation
+    """
+
+    if not openai_client:
+        logger.warning("OPENAI_API_KEY is missing, using local salary fallback")
+        return _local_salary_estimate(job_title, city, experience_level)
+
+    response = openai_client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": "You estimate salaries conservatively and output strictly valid JSON."},
+            {"role": "user", "content": prompt},
+        ],
+        response_format={"type": "json_object"},
+    )
+    try:
+        data = json.loads(response.choices[0].message.content)
+        return {
+            "job_title": job_title,
+            "city": city,
+            "experience_level": experience_level,
+            "estimated_min": int(data.get("estimated_min", 0)),
+            "estimated_median": int(data.get("estimated_median", 0)),
+            "estimated_max": int(data.get("estimated_max", 0)),
+            "confidence_level": float(data.get("confidence_level", 0)),
+            "data_points_used": int(data.get("data_points_used", 0)),
+            "explanation": str(data.get("explanation", "")).strip(),
+        }
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        logger.error(f"Error parsing salary estimate response: {e}")
+        return _local_salary_estimate(job_title, city, experience_level)

@@ -8,9 +8,13 @@ from django.shortcuts import get_object_or_404
 from ai.models import InterviewSession, InterviewQuestion, InterviewFeedback, AIAssistant, Job
 from ai.api.serializers import (
     InterviewAnswerSerializer,
+    InterviewAnswerSubmitSerializer,
     InterviewFeedbackSerializer,
     InterviewQuestionSerializer,
-    InterviewSessionSerializer,
+    InterviewSessionCreateSerializer,
+    InterviewSessionDetailSerializer,
+    InterviewSessionGenerateSerializer,
+    InterviewSessionListSerializer,
 )
 from ai.openai_utils import generate_interview_questions_openai, grade_interview_openai
 from ai.services.interview_workflow import (
@@ -19,6 +23,7 @@ from ai.services.interview_workflow import (
     get_next_unanswered_question,
     save_interview_answer,
 )
+from global_data.enum import InterviewStatus
 import json
 import logging
 
@@ -37,42 +42,49 @@ class InterviewSessionListView(APIView):
     """
     List user sessions or start a new session.
     """
+    serializer_class = InterviewSessionListSerializer
+
     def get(self, request):
         logger.info(f"InterviewSessionListView.get called by user: {request.user}")
-        sessions = InterviewSession.objects.filter(user=request.user) if request.user.is_authenticated else InterviewSession.objects.all()
-        serializer = InterviewSessionSerializer(sessions, many=True)
+        sessions = (
+            InterviewSession.objects.filter(user=request.user).order_by("-created")
+            if request.user.is_authenticated
+            else InterviewSession.objects.all().order_by("-created")
+        )
+        serializer = InterviewSessionListSerializer(sessions, many=True)
         return Response(serializer.data)
 
     def post(self, request):
         logger.info(f"InterviewSessionListView.post called with data: {request.data}")
-        serializer = InterviewSessionSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save(user=request.user if request.user.is_authenticated else None)
-            logger.info("InterviewSession created successfully")
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        logger.warning(f"InterviewSession creation failed: {serializer.errors}")
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer = InterviewSessionCreateSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        session = serializer.save()
+        logger.info("InterviewSession created successfully")
+        return Response(InterviewSessionDetailSerializer(session).data, status=status.HTTP_201_CREATED)
 
 class InterviewSessionDetailView(APIView):
     """
     Retrieve interview session details.
     """
+    serializer_class = InterviewSessionDetailSerializer
+
     def get(self, request, pk):
         logger.info(f"InterviewSessionDetailView.get called for pk: {pk}")
         session = get_object_or_404(InterviewSession, pk=pk)
-        serializer = InterviewSessionSerializer(session)
+        serializer = InterviewSessionDetailSerializer(session)
         return Response(serializer.data)
 
 
 class InterviewAnswerSubmitView(APIView):
     permission_classes = [IsAuthenticated]
+    serializer_class = InterviewAnswerSubmitSerializer
 
     def post(self, request, pk):
         logger.info(f"InterviewAnswerSubmitView.post called for session: {pk}")
         session = get_object_or_404(InterviewSession, pk=pk, user=request.user)
         question_id = request.data.get("question_id")
-        answer_text = request.data.get("answer_text", "")
-        transcript = request.data.get("transcript", "")
+        answer_text = request.data.get("answer_text") or request.data.get("content", "")
+        transcript = request.data.get("transcript", "") or answer_text
 
         if not answer_text and not transcript:
             return Response({"detail": "Provide answer_text or transcript."}, status=status.HTTP_400_BAD_REQUEST)
@@ -96,15 +108,16 @@ class InterviewAnswerSubmitView(APIView):
             question=question,
             answer_text=answer.answer_text or answer.transcript or "",
         )
-        if not hasattr(session, "raw_answer_evaluations"):
-            session.raw_answer_evaluations = {}
         session.raw_answer_evaluations[str(question.id)] = evaluation
+        session.save(update_fields=["raw_answer_evaluations", "modified"])
 
         if session.answers.count() >= session.question_count:
             finalize_interview_feedback(session=session)
             session.refresh_from_db()
+            session.interview_status = InterviewStatus.COMPLETED
+            session.save(update_fields=["interview_status", "modified"])
 
-        serializer = InterviewSessionSerializer(session)
+        serializer = InterviewSessionDetailSerializer(session)
         data = serializer.data
         data["latest_answer"] = InterviewAnswerSerializer(answer).data
         data["latest_answer_evaluation"] = evaluation
@@ -367,25 +380,33 @@ class JobInterviewGenerateView(APIView):
     """
     Generate questions for a specific job before the call starts.
     """
+    serializer_class = InterviewSessionGenerateSerializer
+
     def post(self, request):
         logger.info(f"JobInterviewGenerateView.post called with data: {request.data}")
-        job_id = request.data.get('job_id')
-        job = get_object_or_404(Job, pk=job_id)
-        
+        serializer = InterviewSessionGenerateSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        job = serializer.validated_data.get("job")
+        custom_job_title = serializer.validated_data.get("custom_job_title", "")
+        difficulty = serializer.validated_data.get("difficulty", "medium")
+        question_count = serializer.validated_data.get("questions_count", 5)
+
         # Create an interview session
         session = InterviewSession.objects.create(
             user=request.user if request.user.is_authenticated else None,
             job=job,
-            session_type="job_based",
+            target_job_title=custom_job_title,
+            session_type="job_based" if job else "general_setup",
             interview_status="questions_generated",
             interview_type=request.data.get('interview_type', 'mixed'),
-            question_count=request.data.get('question_count', 5)
+            difficulty=difficulty,
+            question_count=question_count,
         )
-        
+
         # Generate questions using OpenAI
         questions_data = generate_interview_questions_openai(
-            job_title=job.title,
-            job_description=job.description,
+            job_title=job.title if job else custom_job_title,
+            job_description=job.description if job else request.data.get("job_description", ""),
             interview_type=session.interview_type,
             question_count=session.question_count
         )
@@ -407,8 +428,4 @@ class JobInterviewGenerateView(APIView):
                 "rubric": question_obj.rubric
             })
             
-        return Response({
-            "session_id": str(session.id),
-            "job_title": job.title,
-            "questions": created_questions
-        }, status=status.HTTP_201_CREATED)
+        return Response(InterviewSessionDetailSerializer(session).data, status=status.HTTP_201_CREATED)

@@ -64,7 +64,10 @@ def finalize_interview_feedback(*, session: InterviewSession) -> InterviewFeedba
             "strengths": grading_result.get("strengths", []),
             "improvements": grading_result.get("improvements", []),
             "summary_to_read_aloud": grading_result.get("summaryToReadAloud"),
-            "raw_response": grading_result,
+            "raw_response": {
+                **grading_result,
+                "answer_evaluations": session.raw_answer_evaluations,
+            },
         },
     )
     session.interview_status = InterviewStatus.GRADED
