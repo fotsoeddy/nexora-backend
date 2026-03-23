@@ -40,6 +40,10 @@ SECRET_KEY = env_config(
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
 
+if DEBUG and '*' not in ALLOWED_HOSTS:
+    # Allow device testing over the local network during development.
+    ALLOWED_HOSTS = [*ALLOWED_HOSTS, '*']
+
 
 # Application definition
 

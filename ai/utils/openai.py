@@ -6,9 +6,29 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
-OPENAI_MODEL = config('OPENAI_MODEL', default='gpt-4o-mini')
-openai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
+_missing_openai_key_logged = False
+
+
+def _resolve_openai_runtime():
+    global _missing_openai_key_logged
+
+    openai_api_key = config('OPENAI_API_KEY', default='').strip() or config('AI_API_KEY', default='').strip()
+    openai_model = config('OPENAI_MODEL', default='').strip() or config('AI_CHAT_MODEL', default='').strip() or 'gpt-4o-mini'
+    openai_base_url = config('OPENAI_BASE_URL', default='').strip() or config('AI_API_BASE_URL', default='').strip()
+
+    if not openai_api_key:
+        if not _missing_openai_key_logged:
+            logger.warning(
+                "OpenAI API key is missing. Set OPENAI_API_KEY (or AI_API_KEY) to enable real AI responses."
+            )
+            _missing_openai_key_logged = True
+        return None, openai_model
+
+    client_kwargs = {'api_key': openai_api_key}
+    if openai_base_url:
+        client_kwargs['base_url'] = openai_base_url.rstrip('/')
+
+    return OpenAI(**client_kwargs), openai_model
 
 
 def _extract_json_content(response) -> dict | list:
@@ -192,12 +212,13 @@ def generate_interview_questions_openai(job_title, job_description, interview_ty
     - rubric: a detailed guide on what a good answer should include (e.g., mention specific technologies, use STAR method)
     """
 
+    openai_client, openai_model = _resolve_openai_runtime()
     if not openai_client:
         logger.warning("OPENAI_API_KEY is missing, using local interview question fallback")
         return _local_question_fallback(job_title, question_count)
 
     response = openai_client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=openai_model,
         messages=[
             {"role": "system", "content": "You are a world-class HR technology assistant. You output strictly valid JSON."},
             {"role": "user", "content": prompt}
@@ -241,12 +262,13 @@ def grade_interview_openai(job_metadata, questions_with_answers):
     - summaryToReadAloud: a warm, professional 3-sentence summary the AI assistant will read back to the candidate.
     """
 
+    openai_client, openai_model = _resolve_openai_runtime()
     if not openai_client:
         logger.warning("OPENAI_API_KEY is missing, using local interview grading fallback")
         return _local_grade_fallback()
 
     response = openai_client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=openai_model,
         messages=[
             {"role": "system", "content": "You are a critical but constructive hiring expert. Output strictly valid JSON."},
             {"role": "user", "content": prompt}
@@ -281,12 +303,13 @@ def evaluate_interview_answer(job_title, question_text, answer_text, seniority='
     - feedback: one concise, high-impact paragraph of advice
     """
 
+    openai_client, openai_model = _resolve_openai_runtime()
     if not openai_client:
         logger.warning("OPENAI_API_KEY is missing, using local answer evaluation fallback")
         return _local_answer_evaluation(answer_text)
 
     response = openai_client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=openai_model,
         messages=[
             {"role": "system", "content": "You are an AI Interview Coach. Give sharp, actionable feedback. Output strictly valid JSON."},
             {"role": "user", "content": prompt}
@@ -325,12 +348,13 @@ def generate_chat_response(message, context_type="career_advice", conversation=N
     - suggestions: array of 2 short follow-up buttons (e.g., "Analyze my resume", "Mock interview")
     """
 
+    openai_client, openai_model = _resolve_openai_runtime()
     if not openai_client:
         logger.warning("OPENAI_API_KEY is missing, using local chat fallback")
         return _local_chat_response(message, context_type)
 
     response = openai_client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=openai_model,
         messages=[
             {"role": "system", "content": "You are a career growth expert. You empower users with clear, actionable advice. Output strictly valid JSON."},
             {"role": "user", "content": prompt},
@@ -364,12 +388,13 @@ def generate_cover_letter_text(job_title, company_name, tone="professional"):
     - Keep it under 300 words.
     """
 
+    openai_client, openai_model = _resolve_openai_runtime()
     if not openai_client:
         logger.warning("OPENAI_API_KEY is missing, using local cover letter fallback")
         return _local_cover_letter(job_title, company_name, tone)
 
     response = openai_client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=openai_model,
         messages=[
             {"role": "system", "content": "You are a professional copywriter specializing in career applications."},
             {"role": "user", "content": prompt},
@@ -397,12 +422,13 @@ def estimate_salary_range(job_title, city, experience_level):
     - explanation: short summary of market drivers (e.g., remote work influence, tech stack demand)
     """
 
+    openai_client, openai_model = _resolve_openai_runtime()
     if not openai_client:
         logger.warning("OPENAI_API_KEY is missing, using local salary fallback")
         return _local_salary_estimate(job_title, city, experience_level)
 
     response = openai_client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=openai_model,
         messages=[
             {"role": "system", "content": "You provide conservative, realistic salary insights. Output strictly valid JSON."},
             {"role": "user", "content": prompt},

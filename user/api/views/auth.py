@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
+from rest_framework.exceptions import APIException
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -44,13 +45,28 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
         try:
             serializer.is_valid(raise_exception=True)
-            logger.info("Validation successful, returning token")
-            return Response(serializer.validated_data, status=status.HTTP_200_OK)
-        except Exception as e:
-            # If it's a DRF API exception, it has a 'detail' attribute
-            error_data = getattr(e, 'detail', {"detail": str(e)})
-            logger.error(f"Validation failed for login: {error_data}")
-            return Response(error_data, status=status.HTTP_401_UNAUTHORIZED if "credentials" in str(e).lower() else status.HTTP_400_BAD_REQUEST)
+        except APIException as exc:
+            detail = exc.detail
+            if isinstance(detail, dict):
+                payload = detail
+            else:
+                payload = {"detail": detail}
+            logger.error(f"Validation failed for login: {payload}")
+            status_code = (
+                status.HTTP_401_UNAUTHORIZED
+                if "credential" in str(payload).lower()
+                else status.HTTP_400_BAD_REQUEST
+            )
+            return Response(payload, status=status_code)
+        except Exception:
+            logger.exception("Unexpected login error")
+            return Response(
+                {"detail": "Unable to sign in right now. Please retry."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        logger.info("Validation successful, returning token")
+        return Response(serializer.validated_data, status=status.HTTP_200_OK)
 
 
 @extend_schema(
@@ -68,7 +84,7 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        send_verification_email(user)
+        send_verification_email(user, request=request)
         return Response(
             {
                 "id": user.id,
@@ -93,7 +109,7 @@ class ResendVerificationEmailView(APIView):
         email = serializer.validated_data["email"].strip().lower()
         user = User.objects.filter(email__iexact=email).first()
         if user and not user.is_active:
-            send_verification_email(user)
+            send_verification_email(user, request=request)
         return Response(
             {"message": "If the account exists and is not verified, a new verification email has been sent."},
             status=status.HTTP_200_OK,
