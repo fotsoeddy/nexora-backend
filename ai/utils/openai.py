@@ -492,7 +492,7 @@ def scan_cv_openai(cv_text):
         }
 
     response = openai_client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=openai_model,
         messages=[
             {"role": "system", "content": "You are an expert ATS (Applicant Tracking System) auditor. Output strictly valid JSON."},
             {"role": "user", "content": prompt}
@@ -545,6 +545,7 @@ def match_cv_to_job_openai(cv_text, job_title, job_description):
     - result_detail: Detailed justification of the match percentage.
     """
 
+    openai_client, openai_model = _resolve_openai_runtime()
     if not openai_client:
         logger.warning("OPENAI_API_KEY is missing, returning mock matching result")
         return {
