@@ -217,14 +217,18 @@ def generate_interview_questions_openai(job_title, job_description, interview_ty
         logger.warning("OPENAI_API_KEY is missing, using local interview question fallback")
         return _local_question_fallback(job_title, question_count)
 
-    response = openai_client.chat.completions.create(
-        model=openai_model,
-        messages=[
-            {"role": "system", "content": "You are a world-class HR technology assistant. You output strictly valid JSON."},
-            {"role": "user", "content": prompt}
-        ],
-        response_format={"type": "json_object"}
-    )
+    try:
+        response = openai_client.chat.completions.create(
+            model=openai_model,
+            messages=[
+                {"role": "system", "content": "You are a world-class HR technology assistant. You output strictly valid JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"}
+        )
+    except Exception as e:
+        logger.error(f"Error calling OpenAI for question generation: {e}")
+        return _local_question_fallback(job_title, question_count)
     
     try:
         content = _extract_json_content(response)
