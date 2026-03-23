@@ -165,22 +165,31 @@ def _local_salary_estimate(job_title, city, experience_level):
 
 def generate_interview_questions_openai(job_title, job_description, interview_type, question_count=5, seniority='mid', skills=None):
     """
-    Generate interview questions using GPT-4.
+    Generate interview questions using GPT-4o.
     """
     logger.info(f"Generating {question_count} questions for {job_title} ({seniority})")
     skills_str = ", ".join(skills) if skills else "relevant technical and soft skills"
     
     prompt = f"""
-    Generate {question_count} interview questions for a {seniority} level {job_title} position.
-    Job Description: {job_description}
+    You are an expert technical recruiter and hiring manager.
+    Generate {question_count} high-quality interview questions for a {seniority} level {job_title} position.
+    
+    Job Description context:
+    {job_description}
+    
     Interview Type: {interview_type}
     Focus Skills: {skills_str}
 
-    Return the result ONLY as a JSON array of objects with the following keys:
-    - id: unique string ID for the question (e.g., "q1", "q2")
+    Instructions:
+    1. Create a mix of technical competency and behavioral questions.
+    2. For {seniority} level, ensure the depth of the questions is appropriate.
+    3. Include a 'rubric' for each question that defines what a stellar answer looks like.
+
+    Return the result ONLY as a JSON object with a 'questions' key containing an array of objects:
+    - id: unique string ID (e.g., "q1", "q2")
     - question: the text of the interview question
-    - type: the type of question (behavioral, technical, situational)
-    - rubric: a brief guide on what a good answer should include
+    - type: the type (behavioral, technical, situational)
+    - rubric: a detailed guide on what a good answer should include (e.g., mention specific technologies, use STAR method)
     """
 
     if not openai_client:
@@ -190,20 +199,15 @@ def generate_interview_questions_openai(job_title, job_description, interview_ty
     response = openai_client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": "You are an expert technical interviewer. Output strictly valid JSON."},
+            {"role": "system", "content": "You are a world-class HR technology assistant. You output strictly valid JSON."},
             {"role": "user", "content": prompt}
         ],
         response_format={"type": "json_object"}
     )
     
-    logger.debug(f"OpenAI response received for question generation")
-
     try:
         content = _extract_json_content(response)
-        # The prompt asks for an array, but json_object format often wraps in a root key.
-        # Let's handle both or ensure we extract the list.
         if isinstance(content, dict):
-             # If GPT wrapped it like {"questions": [...]}
              questions = content.get('questions', list(content.values())[0] if content else [])
         else:
              questions = content
@@ -214,23 +218,27 @@ def generate_interview_questions_openai(job_title, job_description, interview_ty
 
 def grade_interview_openai(job_metadata, questions_with_answers):
     """
-    Grades an interview based on questions and answers.
-    questions_with_answers: list of dicts with {id, question, answer}
+    Grades an interview based on questions and answers using GPT-4o.
     """
     logger.info(f"Grading interview for {job_metadata.get('jobTitle', 'unknown role')}")
     
     prompt = f"""
-    Grade the following interview for a {job_metadata.get('jobTitle', 'this')} role.
+    You are a Senior Hiring Manager evaluating a candidate for a {job_metadata.get('jobTitle', 'this')} role.
     
-    Interview Session:
+    Interview Transcript:
     {json.dumps(questions_with_answers, indent=2)}
 
-    Provide a evaluation in JSON format with:
-    - overallScore: a decimal from 0 to 10
+    Your task:
+    1. Evaluate each answer for depth, correctness, and professional naming conventions.
+    2. Provide an overall score and a readiness assessment.
+    3. Identify 3 specific strengths and 3 actionable areas for improvement.
+
+    Return the result ONLY as a JSON object with:
+    - overallScore: decimal from 0 to 10.0
     - hireReadiness: "not_ready", "needs_practice", "ready", or "strong_ready"
-    - strengths: array of strings
-    - improvements: array of strings
-    - summaryToReadAloud: a 2-3 sentence summary that the AI assistant can read to the candidate.
+    - strengths: array of 3 specific positive traits or answers
+    - improvements: array of 3 specific, actionable steps the candidate should take
+    - summaryToReadAloud: a warm, professional 3-sentence summary the AI assistant will read back to the candidate.
     """
 
     if not openai_client:
@@ -240,14 +248,12 @@ def grade_interview_openai(job_metadata, questions_with_answers):
     response = openai_client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": "You are a senior hiring manager. Be fair but critical. Output strictly valid JSON."},
+            {"role": "system", "content": "You are a critical but constructive hiring expert. Output strictly valid JSON."},
             {"role": "user", "content": prompt}
         ],
         response_format={"type": "json_object"}
     )
     
-    logger.debug(f"OpenAI response received for interview grading")
-
     try:
         return json.loads(response.choices[0].message.content)
     except json.JSONDecodeError as e:
@@ -256,19 +262,23 @@ def grade_interview_openai(job_metadata, questions_with_answers):
 
 
 def evaluate_interview_answer(job_title, question_text, answer_text, seniority='mid'):
-    logger.info(f"Evaluating answer for {job_title} ({seniority})")
+    """
+    Evaluate a single interview answer immediately.
+    """
+    logger.info(f"Evaluating individual answer for {job_title} ({seniority})")
     prompt = f"""
-    Evaluate the following interview answer for a {seniority} level {job_title} role.
+    Evaluate this specific interview answer for a {seniority} level {job_title} role.
 
-    Question:
-    {question_text}
+    Question: {question_text}
+    Answer: {answer_text}
 
-    Answer:
-    {answer_text}
+    Task:
+    - Rate the answer quality based on relevance, clarity, and use of specific examples.
+    - Provide constructive, immediate feedback.
 
     Return valid JSON with:
-    - score: decimal from 0 to 10
-    - feedback: one concise actionable paragraph
+    - score: decimal from 0 to 10.0
+    - feedback: one concise, high-impact paragraph of advice
     """
 
     if not openai_client:
@@ -278,7 +288,7 @@ def evaluate_interview_answer(job_title, question_text, answer_text, seniority='
     response = openai_client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": "You are an interview evaluator. Output strictly valid JSON."},
+            {"role": "system", "content": "You are an AI Interview Coach. Give sharp, actionable feedback. Output strictly valid JSON."},
             {"role": "user", "content": prompt}
         ],
         response_format={"type": "json_object"}
@@ -296,15 +306,23 @@ def evaluate_interview_answer(job_title, question_text, answer_text, seniority='
 
 
 def generate_chat_response(message, context_type="career_advice", conversation=None):
+    """
+    Generate a conversational response from the Career Assistant.
+    """
     prompt = f"""
-    You are Nexora's AI career assistant.
-    Context type: {context_type}
-    Conversation so far: {json.dumps(conversation or [], ensure_ascii=False)}
-    Candidate message: {message}
+    You are Nexora's Premium AI Career Strategist.
+    Current context: {context_type}
+    Recent chat history: {json.dumps(conversation or [], ensure_ascii=False)}
+    User input: {message}
+
+    Guidelines:
+    - Be professional, encouraging, and data-driven.
+    - Keep responses under 3 sentences unless complex.
+    - Always provide 2 relevant follow-up suggestions.
 
     Return valid JSON with:
-    - content: assistant reply
-    - suggestions: array of 2 short follow-up suggestions
+    - content: Your tactical response
+    - suggestions: array of 2 short follow-up buttons (e.g., "Analyze my resume", "Mock interview")
     """
 
     if not openai_client:
@@ -314,7 +332,7 @@ def generate_chat_response(message, context_type="career_advice", conversation=N
     response = openai_client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": "You are a concise, practical career assistant. Output strictly valid JSON."},
+            {"role": "system", "content": "You are a career growth expert. You empower users with clear, actionable advice. Output strictly valid JSON."},
             {"role": "user", "content": prompt},
         ],
         response_format={"type": "json_object"},
@@ -332,10 +350,18 @@ def generate_chat_response(message, context_type="career_advice", conversation=N
 
 
 def generate_cover_letter_text(job_title, company_name, tone="professional"):
+    """
+    Generate a tailored cover letter.
+    """
     prompt = f"""
-    Write a concise cover letter for the role "{job_title}" at "{company_name}".
-    Tone: {tone}
-    Keep it professional, concrete, and easy to personalize.
+    Write a high-conversion, professional cover letter for a {job_title} position at {company_name}.
+    Desired Tone: {tone}
+    
+    Requirements:
+    - Start with a compelling hook.
+    - Highlight adaptability and value-add.
+    - Use placeholders like [Specific Achievement] for the user to fill in.
+    - Keep it under 300 words.
     """
 
     if not openai_client:
@@ -345,7 +371,7 @@ def generate_cover_letter_text(job_title, company_name, tone="professional"):
     response = openai_client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": "You write concise, credible cover letters."},
+            {"role": "system", "content": "You are a professional copywriter specializing in career applications."},
             {"role": "user", "content": prompt},
         ],
     )
@@ -353,15 +379,22 @@ def generate_cover_letter_text(job_title, company_name, tone="professional"):
 
 
 def estimate_salary_range(job_title, city, experience_level):
+    """
+    Estimate global or regional salary ranges.
+    """
     prompt = f"""
-    Estimate a salary range for the role "{job_title}" in "{city}" for experience level "{experience_level}".
+    As a compensation analyst, estimate the current market salary range for:
+    Role: {job_title}
+    Location: {city}
+    Experience: {experience_level}
+
     Return valid JSON with:
-    - estimated_min
-    - estimated_median
-    - estimated_max
-    - confidence_level
-    - data_points_used
-    - explanation
+    - estimated_min: integer
+    - estimated_median: integer
+    - estimated_max: integer
+    - confidence_level: float 0.0-1.0
+    - data_points_used: integer
+    - explanation: short summary of market drivers (e.g., remote work influence, tech stack demand)
     """
 
     if not openai_client:
@@ -371,7 +404,7 @@ def estimate_salary_range(job_title, city, experience_level):
     response = openai_client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=[
-            {"role": "system", "content": "You estimate salaries conservatively and output strictly valid JSON."},
+            {"role": "system", "content": "You provide conservative, realistic salary insights. Output strictly valid JSON."},
             {"role": "user", "content": prompt},
         ],
         response_format={"type": "json_object"},
@@ -392,3 +425,126 @@ def estimate_salary_range(job_title, city, experience_level):
     except (json.JSONDecodeError, TypeError, ValueError) as e:
         logger.error(f"Error parsing salary estimate response: {e}")
         return _local_salary_estimate(job_title, city, experience_level)
+
+def scan_cv_openai(cv_text):
+    """
+    Comprehensive CV/Resume analysis.
+    """
+    logger.info("Performing enhanced CV scan")
+    
+    prompt = f"""
+    You are an AI Talent Auditor. Analyze this resume text with extreme precision.
+    
+    Resume Content:
+    {cv_text}
+    
+    Evaluation Criteria:
+    1. Impact: Are achievements quantified (e.g., increased revenue by 20%)?
+    2. Readability: Is the structure logical and professional?
+    3. Keywords: Are industry-standard skills present?
+    4. Red Flags: Gaps, spelling errors, or poor formatting.
+
+    Return the result ONLY as a JSON object with:
+    - score: Integer 0-100
+    - summary: A high-level overview of the professional profile.
+    - strengths: Array of 3 key competitive advantages.
+    - improvements: Array of 3 actionable items to increase the score.
+    - errors: Array of errors (typos, contact info missing, missing dates).
+    - details: A deep-dive analysis of why the score was given.
+    """
+
+    if not openai_client:
+        logger.warning("OPENAI_API_KEY is missing, returning mock scanning result")
+        return {
+            "score": 75,
+            "summary": "Solid CV with good professional experience. Needs better formatting in some areas.",
+            "strengths": ["Clear experience history", "Relevant skill set"],
+            "improvements": ["Quantify achievements", "Add a stronger summary section"],
+            "errors": ["Some date inconsistencies found"],
+            "details": "The CV is well-structured but could benefit from more specific metrics and a clearer summary."
+        }
+
+    response = openai_client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": "You are an expert ATS (Applicant Tracking System) auditor. Output strictly valid JSON."},
+            {"role": "user", "content": prompt}
+        ],
+        response_format={"type": "json_object"}
+    )
+    
+    try:
+        return json.loads(response.choices[0].message.content)
+    except json.JSONDecodeError as e:
+        logger.error(f"Error parsing OpenAI CV scanning response: {e}")
+        return {
+            "score": 0,
+            "summary": "Error analyzing CV",
+            "strengths": [],
+            "improvements": [],
+            "errors": ["Failed to parse AI response"],
+            "details": "There was an error processing the CV analysis."
+        }
+
+def match_cv_to_job_openai(cv_text, job_title, job_description):
+    """
+    Match a Resume against a specific Job Description.
+    """
+    logger.info(f"Performing deep Job-Resume match for: {job_title}")
+    
+    prompt = f"""
+    You are an expert Technical Recruiter. Match this candidate's Resume against the specified Job Description.
+    
+    Job Context:
+    Title: {job_title}
+    Description: {job_description}
+    
+    Candidate Resume:
+    {cv_text}
+    
+    Evaluation Task:
+    1. Calculate a match percentage based on skills, experience years, and seniority.
+    2. Identify specific 'missing' keywords that are in the JD but missing from the Resume.
+    3. Highlight direct evidence from the Resume that proves suitability for the role.
+
+    Return the result ONLY as a JSON object with:
+    - match_score: Integer 0-100
+    - fit_analysis: A brief executive summary of candidate-job alignment.
+    - missing_skills: Array of essential requirements from the JD not found in the resume.
+    - relevant_experience: Array of specific past roles/projects that align with this JD.
+    - improvements: How to rewrite or re-order the resume to pass the ATS for THIS specific job.
+    - result_detail: Detailed justification of the match percentage.
+    """
+
+    if not openai_client:
+        logger.warning("OPENAI_API_KEY is missing, returning mock matching result")
+        return {
+            "match_score": 82,
+            "fit_analysis": "Good match for the role's core requirements.",
+            "missing_skills": ["Experience with specific tool X", "Certification Y"],
+            "relevant_experience": ["3 years in similar role", "Background in relevant industry"],
+            "improvements": ["Highlight experience with Z more prominently"],
+            "result_detail": "The candidate has most of the required background, but lacks some specific certifications."
+        }
+
+    response = openai_client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {"role": "system", "content": "You are a specialized Recruitment Intelligence bot. Output strictly valid JSON."},
+            {"role": "user", "content": prompt}
+        ],
+        response_format={"type": "json_object"}
+    )
+    
+    try:
+        return json.loads(response.choices[0].message.content)
+    except json.JSONDecodeError as e:
+        logger.error(f"Error parsing OpenAI Job Match response: {e}")
+        return {
+            "match_score": 0,
+            "fit_analysis": "Error analyzing match",
+            "missing_skills": [],
+            "relevant_experience": [],
+            "improvements": [],
+            "result_detail": "There was an error processing the job match analysis."
+        }

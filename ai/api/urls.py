@@ -10,6 +10,7 @@ from ai.api.views.interview import (
     VapiToolsView,
     JobInterviewGenerateView
 )
+from ai.api.views.ats import CVScannerAPIView, JobMatchATSAPIView
 
 urlpatterns = [
     # Job endpoints
@@ -27,4 +28,8 @@ urlpatterns = [
     path('vapi/grade-interview/', VapiGradeInterviewView.as_view(), name='vapi-grade-interview'),
     path('vapi/save-answer/', VapiSaveAnswerView.as_view(), name='vapi-save-answer'),
     path('vapi/tools/', VapiToolsView.as_view(), name='vapi-tools'),
+
+    # ATS endpoints
+    path('chatgpt-ats/', CVScannerAPIView.as_view(), name='chatgpt-ats'),
+    path('job-ats/', JobMatchATSAPIView.as_view(), name='job-ats'),
 ]

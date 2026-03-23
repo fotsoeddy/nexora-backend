@@ -8,7 +8,7 @@ from ai.models import (
     Job,
     SalaryEstimate,
 )
-from ai.openai_utils import (
+from ai.utils.openai import (
     estimate_salary_range,
     generate_chat_response,
     generate_cover_letter_text,

@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from django.db import transaction
 from django.utils import timezone
-
-from ai.models import InterviewAnswer, InterviewFeedback, InterviewQuestion, InterviewSession
-from ai.openai_utils import evaluate_interview_answer, grade_interview_openai
+from ai.models import InterviewSession, InterviewQuestion, InterviewAnswer, InterviewFeedback
+from ai.utils.openai import evaluate_interview_answer, grade_interview_openai
 from global_data.enum import InterviewStatus
 
 
