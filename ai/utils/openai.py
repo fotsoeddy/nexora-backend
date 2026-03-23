@@ -477,9 +477,9 @@ def scan_cv_openai(cv_text):
     Return the result ONLY as a JSON object with:
     - score: Integer 0-100
     - summary: A high-level overview of the professional profile.
-    - strengths: Array of 3 key competitive advantages.
-    - recommendations: Array of 3 actionable items to increase the score.
-    - errors: Array of errors (typos, contact info missing, missing dates).
+    - strengths: Array of 3 strings (key competitive advantages).
+    - recommendations: Array of 3 strings (actionable items to increase the score).
+    - errors: Array of strings (typos, contact info missing, missing dates).
     - details: A deep-dive analysis of why the score was given.
     """
 
@@ -514,7 +514,7 @@ def scan_cv_openai(cv_text):
             "score": 0,
             "summary": "Error analyzing CV",
             "strengths": [],
-            "improvements": [],
+            "recommendations": [],
             "errors": ["Failed to parse AI response"],
             "details": "There was an error processing the CV analysis."
         }
@@ -543,9 +543,9 @@ def match_cv_to_job_openai(cv_text, job_title, job_description):
     Return the result ONLY as a JSON object with:
     - match_score: Integer 0-100
     - fit_analysis: A brief executive summary of candidate-job alignment.
-    - missing_skills: Array of essential requirements from the JD not found in the resume.
-    - relevant_experience: Array of specific past roles/projects that align with this JD.
-    - recommendations: How to rewrite or re-order the resume to pass the ATS for THIS specific job.
+    - missing_skills: Array of strings (essential requirements from the JD not found in the resume).
+    - relevant_experience: Array of strings (specific past roles/projects that align with this JD).
+    - recommendations: Array of strings (how to rewrite or re-order the resume to pass the ATS for THIS specific job).
     - result_detail: Detailed justification of the match percentage.
     """
 
@@ -579,6 +579,6 @@ def match_cv_to_job_openai(cv_text, job_title, job_description):
             "fit_analysis": "Error analyzing match",
             "missing_skills": [],
             "relevant_experience": [],
-            "improvements": [],
+            "recommendations": [],
             "result_detail": "There was an error processing the job match analysis."
         }
