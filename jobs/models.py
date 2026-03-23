@@ -487,6 +487,29 @@ class Application(BaseModel):
         return f"{self.candidate.user.email} → {self.job_offer.title}"
 
 
+class SavedJob(BaseModel):
+    """A candidate bookmark for a job offer."""
+    candidate = models.ForeignKey(
+        CandidateProfile,
+        on_delete=models.CASCADE,
+        related_name="saved_jobs",
+    )
+    job_offer = models.ForeignKey(
+        JobOffer,
+        on_delete=models.CASCADE,
+        related_name="saved_by_candidates",
+    )
+
+    class Meta(BaseModel.Meta):
+        unique_together = ("candidate", "job_offer")
+        ordering = ["-created_at"]
+        verbose_name = "Offre sauvegardee"
+        verbose_name_plural = "Offres sauvegardees"
+
+    def __str__(self) -> str:
+        return f"{self.candidate.user.email} saved {self.job_offer.title}"
+
+
 # ──────────────────────────────────────────────
 #  Pricing & Subscriptions
 # ──────────────────────────────────────────────
@@ -587,6 +610,11 @@ class JobAlert(BaseModel):
         help_text='Ex: ["Douala", "Yaoundé"]',
     )
     keywords = models.CharField(max_length=255, blank=True)
+    frequency = models.CharField(
+        max_length=20,
+        default="daily",
+        help_text="instant, daily, weekly",
+    )
     min_salary = models.PositiveIntegerField(blank=True, null=True)
     min_match_score = models.PositiveSmallIntegerField(
         default=60,

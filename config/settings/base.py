@@ -166,6 +166,15 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@nexora.local")
 FRONTEND_VERIFY_URL = os.getenv("FRONTEND_VERIFY_URL", "http://localhost:8000/api/auth/email/verify/confirm")
 FRONTEND_RESET_URL = os.getenv("FRONTEND_RESET_URL", "http://localhost:8000/reset-password")
 
+AI_PROVIDER = os.getenv("AI_PROVIDER", "local")
+AI_FALLBACK_TO_LOCAL = env_bool("AI_FALLBACK_TO_LOCAL", True)
+AI_API_KEY = os.getenv("AI_API_KEY", "")
+AI_API_BASE_URL = os.getenv("AI_API_BASE_URL", "")
+AI_REQUEST_TIMEOUT_SECONDS = int(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "20"))
+AI_CHAT_MODEL = os.getenv("AI_CHAT_MODEL", "gpt-4.1-mini")
+AI_WRITING_MODEL = os.getenv("AI_WRITING_MODEL", AI_CHAT_MODEL)
+AI_ANALYTICS_MODEL = os.getenv("AI_ANALYTICS_MODEL", AI_CHAT_MODEL)
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "Nexora Auth API",
     "DESCRIPTION": "API d'authentification complète avec JWT.",
