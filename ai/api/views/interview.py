@@ -15,7 +15,6 @@ from ai.api.serializers import (
     InterviewSessionDetailSerializer,
     InterviewSessionGenerateSerializer,
     InterviewSessionListSerializer,
-    JobInterviewGenerateView
 )
 from ai.utils.openai import generate_interview_questions_openai, grade_interview_openai
 from ai.services.interview_workflow import (
