@@ -10,9 +10,10 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
-from pathlib import Path
-from decouple import config
 from datetime import timedelta
+from pathlib import Path
+
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,11 +22,21 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY')
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=True, cast=bool)
+
+
+def env_config(name, *, dev_default=None, **kwargs):
+    if DEBUG and dev_default is not None:
+        return config(name, default=dev_default, **kwargs)
+    return config(name, **kwargs)
+
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = env_config(
+    'SECRET_KEY',
+    dev_default='django-insecure-nexora-local-development-key',
+)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
 
@@ -87,7 +98,7 @@ WSGI_APPLICATION = 'nexora_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DB_ENGINE = config('DB_ENGINE', default='postgresql')
+DB_ENGINE = config('DB_ENGINE', default='sqlite' if DEBUG else 'postgresql')
 
 if DB_ENGINE == 'sqlite':
     DATABASES = {
@@ -213,7 +224,10 @@ SPECTACULAR_SETTINGS = {
 }
 
 # Vapi webhook auth token
-VAPI_WEBHOOK_TOKEN = config('VAPI_WEBHOOK_TOKEN')
+VAPI_WEBHOOK_TOKEN = env_config(
+    'VAPI_WEBHOOK_TOKEN',
+    dev_default='local-dev-vapi-webhook-token',
+)
 
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = config('EMAIL_HOST', default='localhost')
