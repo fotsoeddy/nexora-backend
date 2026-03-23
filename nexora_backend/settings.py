@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 from decouple import config
+from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -160,8 +161,6 @@ REST_FRAMEWORK = {
     ],
 }
 
-from datetime import timedelta
-
 # Simple JWT settings
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
@@ -205,6 +204,19 @@ SPECTACULAR_SETTINGS = {
 
 # Vapi webhook auth token
 VAPI_WEBHOOK_TOKEN = config('VAPI_WEBHOOK_TOKEN')
+
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='localhost')
+EMAIL_PORT = config('EMAIL_PORT', default=25, cast=int)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False, cast=bool)
+EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@nexora.local')
+FRONTEND_VERIFY_URL = config(
+    'FRONTEND_VERIFY_URL',
+    default='http://127.0.0.1:8000/api/auth/email/verify/confirm',
+)
 
 # Logging Configuration
 LOGGING = {
