@@ -478,7 +478,7 @@ def scan_cv_openai(cv_text):
     - score: Integer 0-100
     - summary: A high-level overview of the professional profile.
     - strengths: Array of 3 key competitive advantages.
-    - improvements: Array of 3 actionable items to increase the score.
+    - recommendations: Array of 3 actionable items to increase the score.
     - errors: Array of errors (typos, contact info missing, missing dates).
     - details: A deep-dive analysis of why the score was given.
     """
@@ -490,7 +490,7 @@ def scan_cv_openai(cv_text):
             "score": 75,
             "summary": "Solid CV with good professional experience. Needs better formatting in some areas.",
             "strengths": ["Clear experience history", "Relevant skill set"],
-            "improvements": ["Quantify achievements", "Add a stronger summary section"],
+            "recommendations": ["Quantify achievements", "Add a stronger summary section"],
             "errors": ["Some date inconsistencies found"],
             "details": "The CV is well-structured but could benefit from more specific metrics and a clearer summary."
         }
@@ -545,7 +545,7 @@ def match_cv_to_job_openai(cv_text, job_title, job_description):
     - fit_analysis: A brief executive summary of candidate-job alignment.
     - missing_skills: Array of essential requirements from the JD not found in the resume.
     - relevant_experience: Array of specific past roles/projects that align with this JD.
-    - improvements: How to rewrite or re-order the resume to pass the ATS for THIS specific job.
+    - recommendations: How to rewrite or re-order the resume to pass the ATS for THIS specific job.
     - result_detail: Detailed justification of the match percentage.
     """
 
@@ -557,7 +557,7 @@ def match_cv_to_job_openai(cv_text, job_title, job_description):
             "fit_analysis": "Good match for the role's core requirements.",
             "missing_skills": ["Experience with specific tool X", "Certification Y"],
             "relevant_experience": ["3 years in similar role", "Background in relevant industry"],
-            "improvements": ["Highlight experience with Z more prominently"],
+            "recommendations": ["Highlight experience with Z more prominently"],
             "result_detail": "The candidate has most of the required background, but lacks some specific certifications."
         }
 
