@@ -1,12 +1,24 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.permissions import BasePermission
 from django.conf import settings
 from django.shortcuts import get_object_or_404
 from ai.models import InterviewSession, InterviewQuestion, InterviewFeedback, AIAssistant, Job
-from ai.api.serializers import InterviewSessionSerializer, InterviewQuestionSerializer, InterviewFeedbackSerializer
+from ai.api.serializers import (
+    InterviewAnswerSerializer,
+    InterviewFeedbackSerializer,
+    InterviewQuestionSerializer,
+    InterviewSessionSerializer,
+)
 from ai.openai_utils import generate_interview_questions_openai, grade_interview_openai
+from ai.services.interview_workflow import (
+    evaluate_answer_inline,
+    finalize_interview_feedback,
+    get_next_unanswered_question,
+    save_interview_answer,
+)
 import json
 import logging
 
@@ -50,6 +62,53 @@ class InterviewSessionDetailView(APIView):
         session = get_object_or_404(InterviewSession, pk=pk)
         serializer = InterviewSessionSerializer(session)
         return Response(serializer.data)
+
+
+class InterviewAnswerSubmitView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        logger.info(f"InterviewAnswerSubmitView.post called for session: {pk}")
+        session = get_object_or_404(InterviewSession, pk=pk, user=request.user)
+        question_id = request.data.get("question_id")
+        answer_text = request.data.get("answer_text", "")
+        transcript = request.data.get("transcript", "")
+
+        if not answer_text and not transcript:
+            return Response({"detail": "Provide answer_text or transcript."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if question_id:
+            question = get_object_or_404(InterviewQuestion, pk=question_id, session=session)
+        else:
+            question = get_next_unanswered_question(session)
+            if not question:
+                return Response({"detail": "No remaining interview question."}, status=status.HTTP_400_BAD_REQUEST)
+
+        answer = save_interview_answer(
+            session=session,
+            question=question,
+            answer_text=answer_text,
+            transcript=transcript,
+            duration_seconds=request.data.get("duration_seconds"),
+        )
+        evaluation = evaluate_answer_inline(
+            session=session,
+            question=question,
+            answer_text=answer.answer_text or answer.transcript or "",
+        )
+        if not hasattr(session, "raw_answer_evaluations"):
+            session.raw_answer_evaluations = {}
+        session.raw_answer_evaluations[str(question.id)] = evaluation
+
+        if session.answers.count() >= session.question_count:
+            finalize_interview_feedback(session=session)
+            session.refresh_from_db()
+
+        serializer = InterviewSessionSerializer(session)
+        data = serializer.data
+        data["latest_answer"] = InterviewAnswerSerializer(answer).data
+        data["latest_answer_evaluation"] = evaluation
+        return Response(data, status=status.HTTP_200_OK)
 
 class VapiGenerateQuestionsView(APIView):
     """
@@ -134,11 +193,16 @@ class VapiGradeInterviewView(APIView):
                     args = {}
             else:
                 args = raw_args
-            
-            grading_result = grade_interview_openai(
-                job_metadata=args.get('job', {}),
-                questions_with_answers=args
-            )
+            session_id = args.get("sessionId")
+            session = InterviewSession.objects.filter(pk=session_id).first() if session_id else None
+            if session:
+                grading_result = finalize_interview_feedback(session=session)
+                grading_result = InterviewFeedbackSerializer(grading_result).data
+            else:
+                grading_result = grade_interview_openai(
+                    job_metadata=args.get('job', {}),
+                    questions_with_answers=args
+                )
             
             results.append({
                 "toolCallId": tool_call_id,
@@ -173,14 +237,19 @@ class VapiSaveAnswerView(APIView):
             else:
                 args = raw_args
 
-            # Logic to persist the answer could go here
-            # e.g., session_id = args.get("sessionId")
-            # question_id = args.get("questionId")
-            # answer = args.get("answer")
+            session = get_object_or_404(InterviewSession, pk=args.get("sessionId"))
+            question = get_object_or_404(InterviewQuestion, pk=args.get("questionId"), session=session)
+            answer = save_interview_answer(
+                session=session,
+                question=question,
+                answer_text=args.get("answer", ""),
+                transcript=args.get("transcript", args.get("answer", "")),
+                duration_seconds=args.get("durationSeconds"),
+            )
 
             results.append({
                 "toolCallId": tool_call_id,
-                "result": {"ok": True}
+                "result": {"ok": True, "answerId": str(answer.id)}
             })
 
         logger.info(f"VapiSaveAnswerView returning {len(results)} results")
@@ -268,11 +337,16 @@ class VapiToolsView(APIView):
                 }
 
             elif name == "save_interview_answer":
-                # Persistence logic could go here
-                # sessionId = args.get("sessionId")
-                # questionId = args.get("questionId")
-                # answer = args.get("answer")
-                result = {"ok": True}
+                session = get_object_or_404(InterviewSession, pk=args.get("sessionId"))
+                question = get_object_or_404(InterviewQuestion, pk=args.get("questionId"), session=session)
+                answer = save_interview_answer(
+                    session=session,
+                    question=question,
+                    answer_text=args.get("answer", ""),
+                    transcript=args.get("transcript", args.get("answer", "")),
+                    duration_seconds=args.get("durationSeconds"),
+                )
+                result = {"ok": True, "answerId": str(answer.id)}
 
             elif name == "grade_interview":
                 result = grade_interview_openai(

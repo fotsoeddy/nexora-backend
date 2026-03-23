@@ -3,6 +3,7 @@ from ai.api.views.job import JobListView, JobDetailView
 from ai.api.views.interview import (
     InterviewSessionListView, 
     InterviewSessionDetailView, 
+    InterviewAnswerSubmitView,
     VapiGenerateQuestionsView, 
     VapiGradeInterviewView,
     VapiSaveAnswerView,
@@ -19,6 +20,7 @@ urlpatterns = [
     path('interviews/sessions/', InterviewSessionListView.as_view(), name='interview-session-list'),
     path('interviews/sessions/generate/', JobInterviewGenerateView.as_view(), name='job-interview-generate'),
     path('interviews/sessions/<uuid:pk>/', InterviewSessionDetailView.as_view(), name='interview-session-detail'),
+    path('interviews/sessions/<uuid:pk>/answers/', InterviewAnswerSubmitView.as_view(), name='interview-answer-submit'),
     
     # Vapi tool endpoints
     path('vapi/generate-questions/', VapiGenerateQuestionsView.as_view(), name='vapi-generate-questions'),
