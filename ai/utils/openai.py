@@ -479,6 +479,7 @@ def scan_cv_openai(cv_text):
     - details: A deep-dive analysis of why the score was given.
     """
 
+    openai_client, openai_model = _resolve_openai_runtime()
     if not openai_client:
         logger.warning("OPENAI_API_KEY is missing, returning mock scanning result")
         return {
@@ -556,7 +557,7 @@ def match_cv_to_job_openai(cv_text, job_title, job_description):
         }
 
     response = openai_client.chat.completions.create(
-        model=OPENAI_MODEL,
+        model=openai_model,
         messages=[
             {"role": "system", "content": "You are a specialized Recruitment Intelligence bot. Output strictly valid JSON."},
             {"role": "user", "content": prompt}
