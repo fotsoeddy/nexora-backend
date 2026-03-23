@@ -1,3 +1,9 @@
+import os
+import django
+
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'nexora_backend.settings')
+django.setup()
+
 from django.contrib.auth import get_user_model
 from ai.models import Job
 

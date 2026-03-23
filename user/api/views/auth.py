@@ -44,12 +44,13 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
         try:
             serializer.is_valid(raise_exception=True)
+            logger.info("Validation successful, returning token")
+            return Response(serializer.validated_data, status=status.HTTP_200_OK)
         except Exception as e:
-            logger.error(f"Validation failed for login: {serializer.errors}")
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-        logger.info("Validation successful, returning token")
-        return Response(serializer.validated_data, status=status.HTTP_200_OK)
+            # If it's a DRF API exception, it has a 'detail' attribute
+            error_data = getattr(e, 'detail', {"detail": str(e)})
+            logger.error(f"Validation failed for login: {error_data}")
+            return Response(error_data, status=status.HTTP_401_UNAUTHORIZED if "credentials" in str(e).lower() else status.HTTP_400_BAD_REQUEST)
 
 
 @extend_schema(
