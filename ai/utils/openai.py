@@ -473,6 +473,8 @@ def scan_cv_openai(cv_text):
         response_format={"type": "json_object"}
     )
     
+    logger.debug(f"OpenAI CV Scan Raw Response: {response.choices[0].message.content}")
+    
     try:
         return json.loads(response.choices[0].message.content)
     except json.JSONDecodeError as e:
