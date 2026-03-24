@@ -5,15 +5,28 @@ from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from ai.models import GlobalSettings
+
 logger = logging.getLogger(__name__)
 
 
 class UserSerializer(serializers.ModelSerializer):
     is_email_verified = serializers.BooleanField(source='is_active', read_only=True)
+    interview_limit_mins = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'is_email_verified', 'is_staff')
+        fields = ('id', 'username', 'email', 'first_name', 'last_name', 'is_email_verified', 'is_staff', 'interview_limit_mins')
+
+    def get_interview_limit_mins(self, obj):
+        try:
+            settings = GlobalSettings.get_settings()
+            extra_minutes = 0.0
+            if hasattr(obj, 'profile'):
+                extra_minutes = obj.profile.extra_minutes
+            return settings.default_minutes_per_assistant + extra_minutes
+        except Exception:
+            return 1.0
 
 
 class RegisterResponseSerializer(serializers.Serializer):
