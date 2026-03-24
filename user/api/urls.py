@@ -1,5 +1,10 @@
 from django.urls import path
 from user.api.views.auth import (
+    CustomTokenObtainPairView,
+    MeView,
+    RefreshView,
+    RegisterView,
+    ResendVerificationEmailView,
     UserSerializer,
     VerifyEmailConfirmView,
     UserConfigView,
