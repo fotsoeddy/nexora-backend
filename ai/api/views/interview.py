@@ -57,12 +57,20 @@ class IsVapiWebhook(BasePermission):
             logger.info("IsVapiWebhook: Permission GRANTED (Token match)")
             return True
         
+        # Detailed comparison for debugging
+        if expected_token:
+            auth_val = auth.replace("Bearer ", "").strip()
+            logger.info(f"IsVapiWebhook: Comparing tokens... Expected start: {expected_token[:4]}..., Got start: {auth_val[:4]}...")
+            if auth_val == expected_token:
+                 logger.info("IsVapiWebhook: Permission GRANTED (Token match after normalization)")
+                 return True
+
         # Fallback for development/debugging if explicitly allowed via DEBUG
         if getattr(settings, "DEBUG", False) and not auth:
             logger.warning("IsVapiWebhook: Permission GRANTED (DEBUG mode bypass for empty Auth header)")
             return True
 
-        logger.warning(f"IsVapiWebhook: Permission DENIED. Received: {auth}")
+        logger.warning(f"IsVapiWebhook: Permission DENIED. Auth header present: {bool(auth)}, Expected prefix: 'Bearer {expected_token[:4] if expected_token else 'None'}'")
         return False
 
 class InterviewSessionListView(APIView):
@@ -341,9 +349,15 @@ class VapiToolsView(APIView):
 
             logger.info(f"VapiToolsView: Processing tool {name} (id: {tool_call_id})")
             
-            # Auto-link the session to this Vapi call ID if we have a sessionId
-            if args.get("sessionId") and call_id:
-                InterviewSession.objects.filter(pk=args.get("sessionId"), vapi_call_id__isnull=True).update(vapi_call_id=call_id)
+            # Auto-link the session and START the timer if not already started
+            session_id = args.get("sessionId")
+            if session_id and call_id:
+                session_filter = InterviewSession.objects.filter(pk=session_id)
+                # Update call ID if missing
+                session_filter.filter(vapi_call_id__isnull=True).update(vapi_call_id=call_id)
+                # START the timer if missing - this is crucial for time tracking!
+                session_filter.filter(started_at__isnull=True).update(started_at=timezone.now())
+                logger.info(f"VapiToolsView: Ensured session {session_id} has started_at and call_id")
 
             if name == "generate_interview_questions":
                 job_id = args.get("jobId")
@@ -405,7 +419,8 @@ class VapiToolsView(APIView):
                     interview_type=interview_type,
                     question_count=num_questions,
                     candidate_name=args.get("candidateName", ""),
-                    vapi_call_id=call_id
+                    vapi_call_id=call_id,
+                    started_at=timezone.now() # START the timer immediately
                 )
 
                 result = {
