@@ -351,3 +351,20 @@ class SalaryEstimate(FrontendRecord):
 
     def __str__(self):
         return f"Salary estimate for {self.job_title}"
+
+
+class GlobalSettings(models.Model):
+    default_minutes_per_assistant = models.FloatField(default=1.0, help_text="Default minutes allowed per assistant call.")
+    end_call_message = models.TextField(default="Your free version is over. Please contact admin to add more minutes.", help_text="Message spoken before the call ends due to time limit.")
+
+    class Meta:
+        verbose_name = "Global Settings"
+        verbose_name_plural = "Global Settings"
+
+    def __str__(self):
+        return "Global Nexora Settings"
+
+    @classmethod
+    def get_settings(cls):
+        obj, created = cls.objects.get_or_create(pk=1)
+        return obj

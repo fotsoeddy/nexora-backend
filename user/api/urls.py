@@ -1,11 +1,8 @@
 from django.urls import path
 from user.api.views.auth import (
-    CustomTokenObtainPairView,
-    MeView,
-    RefreshView,
-    RegisterView,
-    ResendVerificationEmailView,
+    UserSerializer,
     VerifyEmailConfirmView,
+    UserConfigView,
 )
 
 urlpatterns = [
@@ -25,4 +22,6 @@ urlpatterns = [
     path('auth/email/verify/confirm', VerifyEmailConfirmView.as_view()),
     path('auth/me/', MeView.as_view(), name='auth-me'),
     path('auth/me', MeView.as_view()),
+    path('auth/config/', UserConfigView.as_view(), name='user-config'),
+    path('auth/config', UserConfigView.as_view()),
 ]

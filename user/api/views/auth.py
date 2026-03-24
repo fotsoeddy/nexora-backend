@@ -22,6 +22,7 @@ from user.api.serializers.auth import (
     UserSerializer,
 )
 from user.emails import VERIFICATION_SALT, send_verification_email
+from ai.models import GlobalSettings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -181,3 +182,25 @@ class MeView(APIView):
 class RefreshView(TokenRefreshView):
     permission_classes = [AllowAny]
     pass
+
+
+class UserConfigView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["User"],
+        responses={200: OpenApiResponse(description="User configuration and limits.")},
+    )
+    def get(self, request, *args, **kwargs):
+        settings = GlobalSettings.get_settings()
+        user = request.user
+        extra_minutes = 0.0
+        if hasattr(user, 'profile'):
+            extra_minutes = user.profile.extra_minutes
+        
+        max_duration_seconds = int((settings.default_minutes_per_assistant + extra_minutes) * 60)
+        
+        return Response({
+            "max_duration_seconds": max_duration_seconds,
+            "end_call_message": settings.end_call_message,
+        }, status=status.HTTP_200_OK)

@@ -1,7 +1,8 @@
 from rest_framework import serializers
 
-from ai.models import InterviewDifficulty, InterviewQuestion, InterviewSession, Job
+from ai.models import InterviewDifficulty, InterviewQuestion, InterviewSession, Job, GlobalSettings
 from global_data.enum import InterviewStatus
+from user.models import UserProfile
 
 
 class InterviewMessageSerializer(serializers.Serializer):
@@ -64,6 +65,8 @@ class InterviewSessionDetailSerializer(InterviewSessionListSerializer):
     strengths_noted = serializers.SerializerMethodField()
     areas_to_improve = serializers.SerializerMethodField()
     questions = serializers.SerializerMethodField()
+    max_duration_seconds = serializers.SerializerMethodField()
+    end_call_message = serializers.SerializerMethodField()
 
     class Meta(InterviewSessionListSerializer.Meta):
         fields = InterviewSessionListSerializer.Meta.fields + (
@@ -75,7 +78,24 @@ class InterviewSessionDetailSerializer(InterviewSessionListSerializer):
             "strengths_noted",
             "areas_to_improve",
             "questions",
+            "max_duration_seconds",
+            "end_call_message",
         )
+
+    def get_max_duration_seconds(self, obj):
+        settings = GlobalSettings.get_settings()
+        user = obj.user
+        extra_minutes = 0.0
+        if user and hasattr(user, 'profile'):
+            extra_minutes = user.profile.extra_minutes
+        
+        # 1 minute per assistant by default (or as per GlobalSettings)
+        # Assuming session uses 1 interviewer for job_based/general_setup
+        total_minutes = settings.default_minutes_per_assistant + extra_minutes
+        return int(total_minutes * 60)
+
+    def get_end_call_message(self, obj):
+        return GlobalSettings.get_settings().end_call_message
 
     def get_questions(self, obj):
         return [
