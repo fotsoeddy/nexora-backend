@@ -63,6 +63,7 @@ class InterviewSessionDetailSerializer(InterviewSessionListSerializer):
     confidence_score = serializers.SerializerMethodField()
     strengths_noted = serializers.SerializerMethodField()
     areas_to_improve = serializers.SerializerMethodField()
+    questions = serializers.SerializerMethodField()
 
     class Meta(InterviewSessionListSerializer.Meta):
         fields = InterviewSessionListSerializer.Meta.fields + (
@@ -73,7 +74,18 @@ class InterviewSessionDetailSerializer(InterviewSessionListSerializer):
             "confidence_score",
             "strengths_noted",
             "areas_to_improve",
+            "questions",
         )
+
+    def get_questions(self, obj):
+        return [
+            {
+                "id": str(q.id),
+                "question": q.question_text,
+                "type": q.question_type,
+            }
+            for q in obj.questions.order_by("order")
+        ]
 
     def get_messages(self, obj):
         messages = []
