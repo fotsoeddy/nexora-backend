@@ -36,12 +36,16 @@ class IsVapiWebhook(BasePermission):
     Allows access only to requests carrying the correct Vapi webhook Bearer token.
     """
     def has_permission(self, request, view):
+        # Log all headers for deep debugging of Vapi requests
+        all_headers = {k: v for k, v in request.headers.items()}
+        logger.info(f"IsVapiWebhook: Request Headers: {all_headers}")
+
         auth = request.headers.get("Authorization", "")
         expected_token = getattr(settings, "VAPI_WEBHOOK_TOKEN", None)
         
         logger.info(f"IsVapiWebhook: Checking permission for {view.__class__.__name__}")
-        logger.debug(f"IsVapiWebhook: Authorization Header: {auth}")
-        logger.debug(f"IsVapiWebhook: Expected Token Prefix: Bearer {expected_token[:10] if expected_token else 'None'}...")
+        logger.info(f"IsVapiWebhook: Authorization Header: {auth}")
+        logger.info(f"IsVapiWebhook: Expected Token: Bearer {expected_token[:12] if expected_token else 'None'}... [truncated]")
 
         if not expected_token:
             logger.error("IsVapiWebhook: VAPI_WEBHOOK_TOKEN is not set in settings!")
@@ -243,6 +247,7 @@ class VapiSaveAnswerView(APIView):
     """
     Endpoint called by Vapi after each question to save the candidate answer.
     """
+    authentication_classes = []
     permission_classes = [IsVapiWebhook]
     
     def post(self, request):
@@ -284,6 +289,7 @@ class VapiToolsView(APIView):
     """
     Central dispatcher for all Vapi tool calls.
     """
+    authentication_classes = []
     permission_classes = [IsVapiWebhook]
 
     def post(self, request):
