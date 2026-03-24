@@ -1,9 +1,7 @@
 from django.contrib import admin
-from django.apps import apps
+from .models import UserProfile
 
-app = apps.get_app_config('user')
-for model in app.get_models():
-    try:
-        admin.site.register(model)
-    except admin.sites.AlreadyRegistered:
-        pass
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ("user", "extra_minutes")
+    search_fields = ("user__username", "user__email")

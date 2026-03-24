@@ -30,13 +30,34 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+
 class IsVapiWebhook(BasePermission):
     """
     Allows access only to requests carrying the correct Vapi webhook Bearer token.
     """
     def has_permission(self, request, view):
         auth = request.headers.get("Authorization", "")
-        return auth == f"Bearer {settings.VAPI_WEBHOOK_TOKEN}"
+        expected_token = getattr(settings, "VAPI_WEBHOOK_TOKEN", None)
+        
+        logger.info(f"IsVapiWebhook: Checking permission for {view.__class__.__name__}")
+        logger.debug(f"IsVapiWebhook: Authorization Header: {auth}")
+        logger.debug(f"IsVapiWebhook: Expected Token Prefix: Bearer {expected_token[:10] if expected_token else 'None'}...")
+
+        if not expected_token:
+            logger.error("IsVapiWebhook: VAPI_WEBHOOK_TOKEN is not set in settings!")
+            return False
+
+        if auth == f"Bearer {expected_token}":
+            logger.info("IsVapiWebhook: Permission GRANTED (Token match)")
+            return True
+        
+        # Fallback for development/debugging if explicitly allowed via DEBUG
+        if getattr(settings, "DEBUG", False) and not auth:
+            logger.warning("IsVapiWebhook: Permission GRANTED (DEBUG mode bypass for empty Auth header)")
+            return True
+
+        logger.warning(f"IsVapiWebhook: Permission DENIED. Received: {auth}")
+        return False
 
 class InterviewSessionListView(APIView):
     """
@@ -135,10 +156,7 @@ class VapiGenerateQuestionsView(APIView):
         
         results = []
         for tool_call in tool_call_list:
-            # Fix 1: use toolCallId with id as fallback
             tool_call_id = tool_call.get("toolCallId") or tool_call.get("id")
-
-            # Fix 2: arguments may arrive as a JSON string
             raw_args = tool_call.get("function", {}).get("arguments", {})
             if isinstance(raw_args, str):
                 try:
@@ -148,7 +166,6 @@ class VapiGenerateQuestionsView(APIView):
             else:
                 args = raw_args
             
-            # Fix 3: use numQuestions (with questionCount fallback for compatibility)
             question_count = args.get('numQuestions') or args.get('questionCount', 5)
 
             questions_raw = generate_interview_questions_openai(
@@ -160,7 +177,6 @@ class VapiGenerateQuestionsView(APIView):
                 skills=args.get('skills', [])
             )
 
-            # Fix 4: normalize to a predictable question schema
             questions = [
                 {
                     "id": q.get("id", f"q{i + 1}"),
@@ -194,10 +210,7 @@ class VapiGradeInterviewView(APIView):
         
         results = []
         for tool_call in tool_call_list:
-            # Fix 1: use toolCallId with id as fallback
             tool_call_id = tool_call.get("toolCallId") or tool_call.get("id")
-
-            # Fix 2: arguments may arrive as a JSON string
             raw_args = tool_call.get("function", {}).get("arguments", {})
             if isinstance(raw_args, str):
                 try:
@@ -240,7 +253,6 @@ class VapiSaveAnswerView(APIView):
 
         for tool_call in tool_call_list:
             tool_call_id = tool_call.get("toolCallId") or tool_call.get("id")
-
             raw_args = tool_call.get("function", {}).get("arguments", {})
             if isinstance(raw_args, str):
                 try:
@@ -275,8 +287,9 @@ class VapiToolsView(APIView):
     permission_classes = [IsVapiWebhook]
 
     def post(self, request):
-        logger.info(f"VapiToolsView.post called with data: {request.data}")
-        logger.warning(f"AUTH HEADER: {request.headers.get('Authorization')}")
+        logger.info("VapiToolsView: Incoming POST request")
+        logger.debug(f"VapiToolsView data: {request.data}")
+        
         data = request.data
         tool_calls = data.get("message", {}).get("toolCallList", [])
         results = []
@@ -295,19 +308,22 @@ class VapiToolsView(APIView):
             else:
                 args = raw_args
 
-            logger.info(f"Processing tool call: {name} (id: {tool_call_id})")
+            logger.info(f"VapiToolsView: Processing tool {name} (id: {tool_call_id})")
+            logger.debug(f"VapiToolsView tool args: {args}")
 
             if name == "generate_interview_questions":
                 job_id = args.get("jobId")
                 interview_type = args.get("interviewType", "mixed")
                 num_questions = args.get("numQuestions") or args.get("questionCount", 5)
 
-                if job_id:
-                    logger.info(f"Fetching job details for jobId: {job_id}")
+                # Skip job lookup if jobId is N/A or missing
+                if job_id and str(job_id).lower() not in ["na", "none", "null", "n/a"]:
+                    logger.info(f"VapiToolsView: Fetching job details for jobId: {job_id}")
                     job = get_object_or_404(Job, pk=job_id)
                     job_title = job.title
                     job_description = (job.description or "") + "\n\nRequirements:\n" + (job.requirements or "")
                 else:
+                    logger.info("VapiToolsView: No valid jobId provided, using jobTitle/jobDescription from args")
                     job_title = args.get("jobTitle", "Role")
                     job_description = args.get("jobDescription", "")
 
@@ -332,27 +348,40 @@ class VapiToolsView(APIView):
                 result = {"questions": questions}
 
             elif name == "create_interview_session":
+                interview_type = args.get("interviewType", "mixed")
+                num_questions = args.get("numQuestions") or args.get("questionCount", 5)
+
                 job_id = args.get("jobId")
-                logger.info(f"Creating voice-first session for jobId: {job_id}")
-                job = get_object_or_404(Job, pk=job_id)
+                if job_id and str(job_id).lower() not in ["na", "none", "null", "n/a"]:
+                    job = Job.objects.filter(pk=job_id).first()
+                else:
+                    job = None
+
+                logger.info(f"VapiToolsView: Creating voice-first session. Job: {job.title if job else 'None'}")
 
                 session = InterviewSession.objects.create(
                     user=None,
                     job=job,
+                    target_job_title=args.get("jobTitle", ""),
                     session_type="voice_first",
                     interview_status="created",
-                    interview_type=args.get("interviewType", "mixed"),
-                    question_count=args.get("numQuestions") or args.get("questionCount", 5),
+                    interview_type=interview_type,
+                    question_count=num_questions,
+                    candidate_name=args.get("candidateName", "")
                 )
 
                 result = {
                     "sessionId": str(session.id),
-                    "jobTitle": job.title
+                    "jobTitle": (job.title if job else args.get("jobTitle", "Interview")),
                 }
 
             elif name == "save_interview_answer":
-                session = get_object_or_404(InterviewSession, pk=args.get("sessionId"))
-                question = get_object_or_404(InterviewQuestion, pk=args.get("questionId"), session=session)
+                session_id = args.get("sessionId")
+                question_id = args.get("questionId")
+                logger.info(f"VapiToolsView: Saving answer for session {session_id}, question {question_id}")
+                
+                session = get_object_or_404(InterviewSession, pk=session_id)
+                question = get_object_or_404(InterviewQuestion, pk=question_id, session=session)
                 answer = save_interview_answer(
                     session=session,
                     question=question,
@@ -363,18 +392,19 @@ class VapiToolsView(APIView):
                 result = {"ok": True, "answerId": str(answer.id)}
 
             elif name == "grade_interview":
+                logger.info(f"VapiToolsView: Grading interview for session {args.get('sessionId')}")
                 result = grade_interview_openai(
                     job_metadata=args.get("job", {}),
                     questions_with_answers=args,
                 )
 
             else:
-                logger.warning(f"Unknown tool called: {name}")
+                logger.warning(f"VapiToolsView: Unknown tool called: {name}")
                 result = {"error": f"Unknown tool: {name}"}
 
             results.append({"toolCallId": tool_call_id, "result": result})
 
-        logger.info(f"VapiToolsView returning {len(results)} results")
+        logger.info(f"VapiToolsView: Returning {len(results)} results")
         return Response({"results": results})
 
 class JobInterviewGenerateView(APIView):
@@ -392,6 +422,23 @@ class JobInterviewGenerateView(APIView):
         difficulty = serializer.validated_data.get("difficulty", "medium")
         question_count = serializer.validated_data.get("questions_count", 5)
 
+        # Optimization: Try to reuse existing questions for this job
+        questions_data = []
+        if job:
+            # Look for questions from previous sessions of the same job to avoid redundant OpenAI calls
+            # We pick the most recent session's questions that match the requested count
+            prev_session = InterviewSession.objects.filter(job=job).order_by('-created').first()
+            if prev_session:
+                existing_qs = InterviewQuestion.objects.filter(session=prev_session).order_by('order')[:question_count]
+                if existing_qs.count() >= question_count:
+                    logger.info(f"JobInterviewGenerateView: Reusing {question_count} questions from previous session {prev_session.id}")
+                    for eq in existing_qs:
+                        questions_data.append({
+                            'question': eq.question_text,
+                            'type': eq.question_type,
+                            'rubric': eq.rubric
+                        })
+
         # Create an interview session
         session = InterviewSession.objects.create(
             user=request.user if request.user.is_authenticated else None,
@@ -404,15 +451,17 @@ class JobInterviewGenerateView(APIView):
             question_count=question_count,
         )
 
-        # Generate questions using OpenAI
-        questions_data = generate_interview_questions_openai(
-            job_title=job.title if job else custom_job_title,
-            job_description=job.description if job else request.data.get("job_description", ""),
-            interview_type=session.interview_type,
-            question_count=session.question_count
-        )
+        # Generate new questions if none were reused
+        if not questions_data:
+            logger.info("JobInterviewGenerateView: Generating new questions via OpenAI")
+            questions_data = generate_interview_questions_openai(
+                job_title=job.title if job else custom_job_title,
+                job_description=job.description if job else request.data.get("job_description", ""),
+                interview_type=session.interview_type,
+                question_count=session.question_count
+            )
         
-        # Save questions to the database
+        # Save questions to the database for this specific session
         created_questions = []
         for i, q in enumerate(questions_data):
             question_obj = InterviewQuestion.objects.create(
@@ -429,4 +478,5 @@ class JobInterviewGenerateView(APIView):
                 "rubric": question_obj.rubric
             })
             
+        logger.info(f"JobInterviewGenerateView: Session {session.id} ready with {len(created_questions)} questions")
         return Response(InterviewSessionDetailSerializer(session).data, status=status.HTTP_201_CREATED)
