@@ -276,6 +276,7 @@ class VapiToolsView(APIView):
 
     def post(self, request):
         logger.info(f"VapiToolsView.post called with data: {request.data}")
+        logger.warning(f"AUTH HEADER: {request.headers.get('Authorization')}")
         data = request.data
         tool_calls = data.get("message", {}).get("toolCallList", [])
         results = []
