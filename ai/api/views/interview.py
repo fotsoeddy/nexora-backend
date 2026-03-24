@@ -1,10 +1,12 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import IsAuthenticated, BasePermission
 from django.conf import settings
 from django.shortcuts import get_object_or_404
+from django.contrib.auth.models import User
+from django.utils import timezone
+from datetime import timedelta
 from ai.models import InterviewSession, InterviewQuestion, InterviewFeedback, AIAssistant, Job
 from ai.api.serializers import (
     InterviewAnswerSerializer,
@@ -293,11 +295,34 @@ class VapiToolsView(APIView):
     permission_classes = [IsVapiWebhook]
 
     def post(self, request):
-        logger.info("VapiToolsView: Incoming POST request")
-        logger.debug(f"VapiToolsView data: {request.data}")
-        
         data = request.data
-        tool_calls = data.get("message", {}).get("toolCallList", [])
+        message = data.get("message", {})
+        message_type = message.get("type", "tool-calls")
+        call_id = data.get("call", {}).get("id") or message.get("call", {}).get("id") or data.get("callId")
+
+        logger.info(f"VapiToolsView: Incoming POST request ({message_type}) for call {call_id}")
+        
+        # 1. Handle End of Call Report to accurately record duration
+        if message_type == "end-of-call-report":
+            duration = data.get("durationSeconds") or message.get("durationSeconds") or data.get("duration") or 0
+            logger.info(f"VapiToolsView: Received end-of-call report. Call: {call_id}, Duration: {duration}s")
+            
+            if call_id:
+                session = InterviewSession.objects.filter(vapi_call_id=call_id).first()
+                if session:
+                    # Back-calculate started_at if it's missing (shouldn't happen but safe)
+                    if not session.started_at:
+                        session.started_at = timezone.now() - timedelta(seconds=float(duration))
+                    
+                    session.completed_at = session.started_at + timedelta(seconds=float(duration))
+                    session.interview_status = InterviewStatus.COMPLETED
+                    session.save(update_fields=["completed_at", "started_at", "interview_status", "modified"])
+                    logger.info(f"VapiToolsView: Recorded final duration {duration}s for session {session.id}")
+            
+            return Response({"ok": True})
+
+        # 2. Handle Tool Calls
+        tool_calls = message.get("toolCallList", [])
         results = []
 
         for tc in tool_calls:
@@ -315,7 +340,10 @@ class VapiToolsView(APIView):
                 args = raw_args
 
             logger.info(f"VapiToolsView: Processing tool {name} (id: {tool_call_id})")
-            logger.debug(f"VapiToolsView tool args: {args}")
+            
+            # Auto-link the session to this Vapi call ID if we have a sessionId
+            if args.get("sessionId") and call_id:
+                InterviewSession.objects.filter(pk=args.get("sessionId"), vapi_call_id__isnull=True).update(vapi_call_id=call_id)
 
             if name == "generate_interview_questions":
                 job_id = args.get("jobId")
@@ -365,15 +393,19 @@ class VapiToolsView(APIView):
 
                 logger.info(f"VapiToolsView: Creating voice-first session. Job: {job.title if job else 'None'}")
 
+                user_id = args.get("userId")
+                user = User.objects.filter(id=user_id).first() if user_id else None
+
                 session = InterviewSession.objects.create(
-                    user=None,
+                    user=user,
                     job=job,
                     target_job_title=args.get("jobTitle", ""),
                     session_type="voice_first",
                     interview_status="created",
                     interview_type=interview_type,
                     question_count=num_questions,
-                    candidate_name=args.get("candidateName", "")
+                    candidate_name=args.get("candidateName", ""),
+                    vapi_call_id=call_id
                 )
 
                 result = {

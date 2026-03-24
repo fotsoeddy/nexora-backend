@@ -184,6 +184,12 @@ class RefreshView(TokenRefreshView):
     pass
 
 
+from ai.models import GlobalSettings
+from ai.utils.time_limit import get_user_remaining_seconds
+import logging
+
+# ... (logger definition)
+
 class UserConfigView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -194,11 +200,9 @@ class UserConfigView(APIView):
     def get(self, request, *args, **kwargs):
         settings = GlobalSettings.get_settings()
         user = request.user
-        extra_minutes = 0.0
-        if hasattr(user, 'profile'):
-            extra_minutes = user.profile.extra_minutes
         
-        max_duration_seconds = int((settings.default_minutes_per_assistant + extra_minutes) * 60)
+        # Dynamically calculate remaining seconds
+        max_duration_seconds = get_user_remaining_seconds(user)
         
         return Response({
             "max_duration_seconds": max_duration_seconds,
